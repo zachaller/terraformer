@@ -432,6 +432,11 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 			area[i], areaAmt[i] = float32(grid.Index(a.cell)), float32(a.amount)
 		}
 		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
+	} else if tints, ok := g.hubCoverage(); ok {
+		for i, a := range tints {
+			area[i], areaAmt[i] = float32(grid.Index(a.cell)), float32(a.amount)
+		}
+		tint = []float32{0x5A / 255.0, 0xD1 / 255.0, 0xF5 / 255.0}
 	}
 	gridAt := []float32{0, 0, 0}
 	if c := g.highlighted(); c != nil {

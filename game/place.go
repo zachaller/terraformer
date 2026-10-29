@@ -148,6 +148,38 @@ func (g *Game) placementArea(bt sim.BuildingType, c sim.Cell) ([]areaTint, color
 	return nil, colAmber
 }
 
+// hubCoverage is the area to shade while inspecting a hub (a pylon or the
+// lander): the tiles it covers faintly, and the buildings it connects
+// strongly.
+func (g *Game) hubCoverage() ([]areaTint, bool) {
+	if !g.inspectOpen() {
+		return nil, false
+	}
+	p := g.planet
+	hub := p.BuildingAt(*g.selected)
+	if hub == nil || hub.Spec().CoverRadius == 0 {
+		return nil, false
+	}
+	connected := map[int]bool{}
+	for _, s := range p.Spokes() {
+		if s[0] == hub.Tile {
+			connected[s[1]] = true
+		}
+	}
+	var out []areaTint
+	for _, a := range areaCells(p.Grid, *g.selected, int(math.Ceil(hub.Spec().CoverRadius))) {
+		if p.Distance(*g.selected, a.cell) > hub.Spec().CoverRadius {
+			continue
+		}
+		amount := 0.15
+		if connected[p.Grid.Index(a.cell)] {
+			amount = 0.5
+		}
+		out = append(out, areaTint{a.cell, amount})
+	}
+	return out, true
+}
+
 // ringCell is a tile and how many neighbour-steps it is from somewhere.
 type ringCell struct {
 	cell sim.Cell

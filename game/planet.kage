@@ -663,13 +663,16 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		}
 	}
 
-	if Ghost >= 0 {
-		// Tint the tiles the new building would heat or pollute.
+	if Area[0] >= 0 {
+		// Tint the tiles the new building would affect, or the inspected
+		// hub covers.
 		for i := 0; i < 60; i++ {
 			if Area[i] == tile {
 				base = mix(base, AreaTint, AreaAmt[i])
 			}
 		}
+	}
+	if Ghost >= 0 {
 		if tile == Ghost {
 			gb := building(GhostType, tileLocal(d, dm, ij)*artScale, 1, aa*artScale)
 			base = mix(base, gb.rgb, gb.a*0.75)

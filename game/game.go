@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/zachaller/terraformer/sim"
@@ -74,8 +73,6 @@ type Game struct {
 	atlasSrc   []int32 // tile shown by each atlas colour pixel
 	atlasDirty bool
 
-	hud, label *ebiten.Image
-
 	cam      camera
 	input    pointerInput
 	selected *sim.Cell
@@ -84,7 +81,18 @@ type Game struct {
 	menuOpen bool
 	linkFrom *sim.Cell // first end of a link being made
 	message  string
+	msgKind  msgKind
 	msgUntil int // tick the message disappears
+
+	goalCollapsed bool
+	metalHist     []float64 // metal produced so far, sampled each day
+
+	// planetTarget is the screen area (x, y, w, h in pixels) the UI leaves
+	// for the planet; planetArea eases towards it so the planet glides
+	// rather than jumps when panels open and close.
+	planetTarget, planetArea [4]float64
+	// focus, if set, is a tile the camera is turning to centre.
+	focus    *sim.Cell
 	view     viewMode
 	speed    int     // index into speeds
 	stepDebt float64 // fractional simulation steps owed
@@ -151,6 +159,7 @@ func (g *Game) setPlanet(p *sim.Planet) {
 		g.tool = toolInspect
 	}
 	g.goalsSeen = p.GoalsDone()
+	g.metalHist = nil
 }
 
 func (g *Game) Update() error {
@@ -160,6 +169,8 @@ func (g *Game) Update() error {
 		return ebiten.Termination
 	}
 	g.ticks++
+	g.runUI(g.newUI(nil))
+	g.easePlanetArea()
 	g.layoutCamera()
 	if g.ticks == 1 && g.savingEnabled() {
 		g.loadSave()
@@ -170,22 +181,35 @@ func (g *Game) Update() error {
 	gs := g.input.update()
 	g.cam.zoomBy(gs.zoom)
 	switch {
-	case gs.dragging:
+	case gs.dragging && (gs.dragX != 0 || gs.dragY != 0):
+		g.focus = nil
 		g.cam.drag(gs.dragX, gs.dragY)
-	case gs.tap:
+	case gs.dragging, gs.tap:
 		g.cam.stop()
 	default:
 		g.cam.coast()
 	}
-	if gs.tap && !g.tapButton(gs.tapX, gs.tapY) {
-		g.tapPlanet(gs.tapX, gs.tapY)
+	if gs.tap {
+		u := g.newUI(nil)
+		u.tapping, u.tapX, u.tapY = true, gs.tapX/u.s, gs.tapY/u.s
+		g.runUI(u)
+		switch {
+		case !u.hit:
+			g.tapPlanet(gs.tapX, gs.tapY)
+		case u.action != nil:
+			u.action()
+		}
+	}
+
+	if g.focus != nil && g.cam.turnTowards(g.planet.Grid.DirFromCell(*g.focus), 0.15) {
+		g.focus = nil
 	}
 
 	if g.opts.ScreenshotPath != "" && g.ticks == 2 {
 		g.selectAt(g.cam.cx, g.cam.cy)
 		if bs := g.planet.Buildings(); len(bs) > 0 {
 			c := g.planet.Grid.CellAt(bs[len(bs)-1].Tile)
-			g.selected = &c
+			g.selected, g.focus = &c, &c
 		}
 	}
 
@@ -194,6 +218,12 @@ func (g *Game) Update() error {
 		g.planet.Step()
 		g.stepDebt--
 		g.atlasDirty = true
+		if g.planet.Ticks%10 == 0 {
+			g.metalHist = append(g.metalHist, g.planet.Produced()[sim.Metal])
+			if len(g.metalHist) > 6 {
+				g.metalHist = g.metalHist[1:]
+			}
+		}
 	}
 	g.announceGoals()
 	if g.savingEnabled() {
@@ -218,24 +248,34 @@ func (g *Game) announceGoals() {
 	} else {
 		msg += " Every goal done. The planet is alive"
 	}
-	g.showMessage(msg)
+	g.showMessage(msg, msgGood)
 }
 
 // handleKeys provides desktop shortcuts for the on-screen buttons.
 func (g *Game) handleKeys() {
-	if g.planet.Landed() {
-		for i, t := range menuTools {
+	landed := g.planet.Landed()
+	if landed {
+		for i, t := range buildTools {
 			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
 				g.setTool(t)
 			}
 		}
 	}
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyB) && g.planet.Landed():
+	case inpututil.IsKeyJustPressed(ebiten.KeyB) && landed:
 		g.menuOpen = !g.menuOpen
+	case inpututil.IsKeyJustPressed(ebiten.KeyI) && landed:
+		g.setTool(toolInspect)
+	case inpututil.IsKeyJustPressed(ebiten.KeyL) && landed:
+		g.setTool(toolLink)
+	case inpututil.IsKeyJustPressed(ebiten.KeyX) && landed:
+		g.setTool(toolDemolish)
+	case inpututil.IsKeyJustPressed(ebiten.KeyG):
+		g.goalCollapsed = !g.goalCollapsed
 	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
 		g.menuOpen = false
 		g.linkFrom = nil
+		g.selected = nil
 	case inpututil.IsKeyJustPressed(ebiten.KeyV):
 		g.view = (g.view + 1) % numViews
 		g.atlasDirty = true
@@ -250,15 +290,36 @@ func (g *Game) handleKeys() {
 	}
 }
 
-// layoutCamera centres the planet in the part of the screen not covered by
-// system bars or cutouts.
-func (g *Game) layoutCamera() {
-	l, t, r, b := currentSafeArea()
-	g.cam.layoutIn(l, t, float64(g.w)-l-r, float64(g.h)-t-b)
+// newUI starts a UI pass that draws to dst, or only lays out if dst is nil.
+func (g *Game) newUI(dst *ebiten.Image) *ui {
+	return &ui{g: g, dst: dst, s: ebiten.Monitor().DeviceScaleFactor()}
 }
 
-func (g *Game) showMessage(m string) {
+// easePlanetArea moves the planet's screen area a step towards where the
+// UI wants it.
+func (g *Game) easePlanetArea() {
+	if g.planetArea[2] == 0 {
+		g.planetArea = g.planetTarget
+		return
+	}
+	for i := range g.planetArea {
+		g.planetArea[i] += (g.planetTarget[i] - g.planetArea[i]) * 0.2
+	}
+}
+
+// layoutCamera centres the planet in the space the UI leaves for it.
+func (g *Game) layoutCamera() {
+	a := g.planetArea
+	if a[2] == 0 {
+		l, t, r, b := currentSafeArea()
+		a = [4]float64{l, t, float64(g.w) - l - r, float64(g.h) - t - b}
+	}
+	g.cam.layoutIn(a[0], a[1], a[2], a[3])
+}
+
+func (g *Game) showMessage(m string, kind msgKind) {
 	g.message = m
+	g.msgKind = kind
 	g.msgUntil = g.ticks + messageTime*ebiten.TPS()
 }
 
@@ -274,27 +335,31 @@ func (g *Game) tapPlanet(x, y float64) {
 	p := g.planet
 	g.atlasDirty = true
 
+	if g.tool == toolInspect {
+		g.focus = &c
+	}
 	if bt, ok := g.tool.building(); ok {
 		if _, err := p.Build(bt, c); err != nil {
-			g.showMessage(err.Error())
+			g.showMessage(err.Error(), msgWarn)
 		} else {
-			g.showMessage(fmt.Sprintf("Built %v. Use Link to connect it", bt))
+			g.showMessage(fmt.Sprintf("Built a %v. Now Link it to your network", bt), msgInfo)
 		}
 		return
 	}
 	switch g.tool {
 	case toolLand:
 		if err := p.Land(c); err != nil {
-			g.showMessage(err.Error())
+			g.showMessage(err.Error(), msgWarn)
 			return
 		}
 		g.tool = toolInspect
-		g.showMessage("Landed! Open the Tool menu to build")
+		g.selected = nil
+		g.showMessage("Landed! Tap Build to start your colony", msgGood)
 	case toolDemolish:
 		if err := p.Demolish(c); err != nil {
-			g.showMessage(err.Error())
+			g.showMessage(err.Error(), msgWarn)
 		} else {
-			g.showMessage("Demolished (half the metal refunded)")
+			g.showMessage("Removed. Half its metal was refunded", msgInfo)
 		}
 	case toolLink:
 		g.tapLink(c)
@@ -309,19 +374,19 @@ func (g *Game) tapLink(c sim.Cell) {
 	switch {
 	case p.BuildingAt(c) == nil:
 		g.linkFrom = nil
-		g.showMessage(sim.ErrNoBuilding.Error())
+		g.showMessage(sim.ErrNoBuilding.Error(), msgWarn)
 	case g.linkFrom == nil || *g.linkFrom == c:
 		g.linkFrom = &c
-		g.showMessage("Now tap a building to link to")
+		g.showMessage("Now tap a building to link it to", msgInfo)
 	default:
 		from := *g.linkFrom
 		cost := p.LinkCost(from, c)
 		if err := p.Link(from, c); err != nil {
-			g.showMessage(err.Error())
+			g.showMessage(err.Error(), msgWarn)
 			return
 		}
 		g.linkFrom = &c
-		g.showMessage(fmt.Sprintf("Linked (%.1f metal). Tap another to keep going", cost))
+		g.showMessage(fmt.Sprintf("Linked for %.1f metal. Tap another building to keep going", cost), msgGood)
 	}
 }
 
@@ -344,10 +409,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	g.drawPlanet(screen)
 	g.drawLinks(screen)
-	g.drawHUD(screen)
-	g.drawButtons(screen)
+	g.runUI(g.newUI(screen))
 
-	if g.opts.ScreenshotPath != "" && g.ticks >= 10 && !g.done {
+	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {
 		if err := savePNG(screen, g.opts.ScreenshotPath); err != nil {
 			fmt.Fprintln(os.Stderr, "screenshot:", err)
 		}
@@ -439,129 +503,11 @@ func (g *Game) drawLinks(screen *ebiten.Image) {
 	}
 }
 
-func (g *Game) drawHUD(screen *ebiten.Image) {
-	p := g.planet
-	st := p.Stats()
-	stores := p.Stores()
-	msg := fmt.Sprintf("Day %d   Atmosphere %.2f kPa   Avg %.1fC   Life %.1f%%\nMetal %.1f   Ore %.1f   Ice %.0f   Water %.1f   FPS %.0f",
-		p.Ticks/10, p.Atmosphere, st.AvgTemp, st.LifeCover*100, stores[sim.Metal], stores[sim.Ore], st.Ice, st.Water, ebiten.ActualFPS())
-	msg += "\nGoal: " + p.GoalSummary()
-	if goal, _, ok := p.CurrentGoal(); ok {
-		for _, line := range wrap(goal.Hint, hudColumns-2) {
-			msg += "\n  " + line
-		}
-	}
-	if c := g.selected; c != nil {
-		msg += "\n\n" + g.tileInfo(*c)
-	}
-	if g.ticks < g.msgUntil {
-		for i, line := range wrap(g.message, hudColumns-2) {
-			if i == 0 {
-				msg += "\n\n> " + line
-			} else {
-				msg += "\n  " + line
-			}
-		}
-	}
-	// The debug font is fixed-size, so draw it offscreen and scale it up to
-	// stay readable on high-DPI phone screens.
-	if g.hud == nil {
-		g.hud = ebiten.NewImage(6*hudColumns+12, 16*20)
-	}
-	g.hud.Clear()
-	ebitenutil.DebugPrint(g.hud, msg)
-	s := ebiten.Monitor().DeviceScaleFactor()
-	l, t, _, _ := currentSafeArea()
-
-	// A translucent panel behind the text keeps it readable over bright
-	// terrain like ice caps. The debug font is 6×16 pixels per character.
-	lines := strings.Split(msg, "\n")
-	widest := 0
-	for _, line := range lines {
-		widest = max(widest, len(line))
-	}
-	pw, ph := float64(6*widest+12)*s, float64(16*len(lines)+8)*s
-	vector.FillRect(screen, float32(l+2*s), float32(t+4*s), float32(pw), float32(ph), color.RGBA{0, 0, 0, 150}, false)
-
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(s, s)
-	op.GeoM.Translate(l+8*s, t+8*s)
-	screen.DrawImage(g.hud, op)
-}
-
-// tileInfo describes a tile and any building on it for the HUD.
-func (g *Game) tileInfo(c sim.Cell) string {
-	p := g.planet
-	t := p.Tile(c)
-	idx := p.Grid.Index(c)
-	s := fmt.Sprintf("Tile %d (%d, %d)  %v  height %+.2f\nTemp %.1fC  Ice %.2f  Water %.3f  Life %.0f%%",
-		c.Face, c.I, c.J, t.Kind(), t.Height, t.Temp, t.Ice, t.Water, t.Life*100)
-	var extras []string
-	if t.Ore > 0 {
-		extras = append(extras, fmt.Sprintf("Ore deposit %.0f", t.Ore))
-	}
-	if t.Pollution > 0.01 {
-		extras = append(extras, fmt.Sprintf("Pollution %.2f", t.Pollution))
-	}
-	if h := p.TotalHeat(idx); h > 0.5 {
-		extras = append(extras, fmt.Sprintf("Heated +%.0fC", h))
-	}
-	if sim.Habitable(t) {
-		extras = append(extras, "Suits microbes")
-	}
-	if len(extras) > 0 {
-		s += "\n" + strings.Join(extras, "   ")
-	}
-
-	b := p.BuildingAt(c)
-	if b == nil {
-		return s
-	}
-	spec := b.Spec()
-	s += fmt.Sprintf("\n%s: running at %.0f%%", spec.Name, b.Activity*100)
-	for r := range sim.NumResources {
-		if b.In[r] > 0.005 || b.Out[r] > 0.005 {
-			s += fmt.Sprintf("   %v in %.1f out %.1f", sim.Resource(r), b.In[r], b.Out[r])
-		}
-	}
-	n := p.NetworkOf(b)
-	s += fmt.Sprintf("\nNetwork: %d buildings, power %.0f/%.0f", len(n.Members), n.PowerSupply, n.PowerDemand)
-	if !n.HasDepot {
-		s += ", not linked to the lander"
-	}
-	return s
-}
-
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	g.w = int(math.Ceil(float64(outsideWidth) * s))
 	g.h = int(math.Ceil(float64(outsideHeight) * s))
 	return g.w, g.h
-}
-
-// hudColumns is how many characters fit across the HUD: chosen so it still
-// fits a narrow phone screen in portrait.
-const hudColumns = 58
-
-// wrap breaks s into lines of at most width characters, at spaces.
-func wrap(s string, width int) []string {
-	var lines []string
-	line := ""
-	for _, word := range strings.Fields(s) {
-		switch {
-		case line == "":
-			line = word
-		case len(line)+1+len(word) <= width:
-			line += " " + word
-		default:
-			lines = append(lines, line)
-			line = word
-		}
-	}
-	if line != "" {
-		lines = append(lines, line)
-	}
-	return lines
 }
 
 func vec3f(v sim.Vec3) []float32 { return []float32{float32(v.X), float32(v.Y), float32(v.Z)} }

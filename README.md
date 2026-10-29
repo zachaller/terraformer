@@ -7,6 +7,8 @@ shape a barren planet until life takes hold. See
 ![Starting planet](docs/images/globe-prototype.png)
 ![After warming: seas and microbes](docs/images/terraformed.png)
 ![A small colony: lander, solar, mine, smelter and heater](docs/images/colony.png)
+![Main screen](docs/images/ui-main.png)
+![Inspect panel](docs/images/ui-inspect.png)
 
 ## Status: first playable (roadmap step 5)
 
@@ -26,6 +28,9 @@ shape a barren planet until life takes hold. See
   the screen with a hint and progress: Land → Dig for ore → Make metal →
   Warm the ground → Liquid water → First life → Spread life → Thicken the
   air → Thaw → Living world.
+- A designed interface (see the [UX mocks](https://claude.ai/artifact/LMMKh2HSCZaoKDpbrFCqT3)):
+  Sora and JetBrains Mono fonts (embedded; see `game/fonts/`), status chips,
+  a goal card, a tool dock, a map-view rail, messages, and an inspect panel.
 - Automatic saving every 30 seconds, when the app goes into the background,
   and when the desktop window closes. **Tool → New planet** (tap twice)
   starts over on a fresh planet.
@@ -49,15 +54,25 @@ buffer) pulse red.
 
 ### Controls
 
+The bottom bar holds the tools; the column of buttons on the right switches
+map view; the pill above the bar sets the speed. Tap the goal card to
+collapse it. With **Inspect**, tapping a tile opens a panel that explains it:
+why a building isn't at full speed (with a one-tap fix), whether microbes can
+live there and what's stopping them, and the building's network.
+
 | Action | Touch | Desktop |
 |---|---|---|
 | Rotate | Drag | Drag with left mouse button |
 | Zoom | Pinch | Mouse wheel |
 | Use the current tool on a tile | Tap | Click |
-| Open the build menu (Inspect, Link, Demolish, buildings, New planet) | **Tool** button | `B`, or `1`–`7` to pick a tool directly |
-| Link buildings | Link tool: tap one building, then another (chains continue from the last) | same |
-| Cycle view (Surface / Temperature / Water / Life / Industry) | **View** button | `V` |
-| Cycle speed (Paused / 1x / 4x) | **Speed** button | `Space` pause, `F` fast |
+| Build menu (Solar, Mine, Smelter, Heater, new planet) | **Build** | `B`, or `1`–`4` to pick a building |
+| Link buildings: tap one, then another (chains continue) | **Link** | `L` |
+| Inspect a tile or building | **Inspect** | `I` |
+| Remove a building (half its metal back) | **Remove** | `X` |
+| Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |
+| Speed (Paused / 1× / 4×) | Speed pill | `Space` pause, `F` fast |
+| Collapse the goal card | Tap it | `G` |
+| Close panels, cancel a link | Close button | `Esc` |
 
 ## Running on desktop
 
@@ -121,7 +136,7 @@ go test ./sim -run Playthrough -v   # shows the bot's pacing
 
 ```
 sim/          pure Go simulation: grid, planet generation, climate/water/life rules, buildings and networks (no engine imports)
-game/         Ebitengine front end: camera, input, planet shader, views, build menu, HUD
+game/         Ebitengine front end: camera, input, planet shader, views, UI (ui.go, inspect.go, draw.go, text.go), fonts
 cmd/desktop/  desktop entry point
 mobile/       Android entry point, bound by ebitenmobile
 android/      thin Android project (one Activity hosting the game view)

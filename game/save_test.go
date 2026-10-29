@@ -50,16 +50,3 @@ func TestSavingDisabledForDemos(t *testing.T) {
 		}
 	}
 }
-
-func TestWrap(t *testing.T) {
-	got := wrap("one two three four", 9)
-	want := []string{"one two", "three", "four"}
-	if len(got) != len(want) {
-		t.Fatalf("wrap = %q, want %q", got, want)
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Fatalf("wrap = %q, want %q", got, want)
-		}
-	}
-}

@@ -74,3 +74,18 @@ func TestRotationStaysOrthonormal(t *testing.T) {
 		}
 	}
 }
+
+func TestTurnTowardsCentresDirection(t *testing.T) {
+	c := newCamera()
+	c.layout(800, 600)
+	d := sim.Vec3{X: 0.6, Y: -0.3, Z: 0.5}.Normalize()
+	for range 200 {
+		if c.turnTowards(d, 0.2) {
+			break
+		}
+	}
+	x, y, visible := c.project(d)
+	if !visible || math.Abs(x-c.cx) > 1 || math.Abs(y-c.cy) > 1 {
+		t.Fatalf("direction ended at (%.1f, %.1f), want the centre (%.1f, %.1f)", x, y, c.cx, c.cy)
+	}
+}

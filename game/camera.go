@@ -66,6 +66,20 @@ func (c *camera) coast() {
 
 func (c *camera) stop() { c.spinX, c.spinY = 0, 0 }
 
+// turnTowards rotates the planet a step (a fraction of the remaining angle)
+// towards showing planet direction d at the centre of the view. It reports
+// whether d is already there.
+func (c *camera) turnTowards(d sim.Vec3, fraction float64) bool {
+	vx, vy, vz := c.rot[0].Dot(d), c.rot[1].Dot(d), c.rot[2].Dot(d)
+	yaw, pitch := -math.Atan2(vx, vz), math.Atan2(vy, vz)
+	if math.Abs(yaw)+math.Abs(pitch) < 0.002 {
+		return true
+	}
+	c.stop()
+	c.rotate(yaw*fraction, pitch*fraction)
+	return false
+}
+
 func (c *camera) zoomBy(f float64) {
 	c.zoom = math.Min(math.Max(c.zoom*f, minZoom), maxZoom)
 }

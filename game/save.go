@@ -55,17 +55,17 @@ func (g *Game) loadSave() {
 		return
 	}
 	if err != nil {
-		g.showMessage("Couldn't open the save: " + err.Error())
+		g.showMessage("Couldn't open the save: "+err.Error(), msgWarn)
 		return
 	}
 	defer f.Close()
 	p, err := sim.Load(f)
 	if err != nil {
-		g.showMessage("Couldn't load the save, starting fresh: " + err.Error())
+		g.showMessage("Couldn't load the save, starting fresh: "+err.Error(), msgWarn)
 		return
 	}
 	g.setPlanet(p)
-	g.showMessage(fmt.Sprintf("Welcome back. Day %d", p.Ticks/10))
+	g.showMessage(fmt.Sprintf("Welcome back. Day %d", p.Ticks/10), msgGood)
 }
 
 // save writes the planet to the save file, via a temporary file so a crash
@@ -108,7 +108,7 @@ func (g *Game) autosave() {
 		return
 	}
 	if err := g.save(); err != nil {
-		g.showMessage("Couldn't save: " + err.Error())
+		g.showMessage("Couldn't save: "+err.Error(), msgWarn)
 		g.lastSave = g.ticks // don't retry every frame
 	}
 }
@@ -118,8 +118,8 @@ func (g *Game) newPlanet() {
 	g.setPlanet(sim.NewPlanet(g.opts.GridSize, uint64(time.Now().UnixNano())))
 	g.tool = toolLand
 	if err := os.Remove(savePath()); err != nil && !errors.Is(err, fs.ErrNotExist) && g.savingEnabled() {
-		g.showMessage("Couldn't remove the old save: " + err.Error())
+		g.showMessage("Couldn't remove the old save: "+err.Error(), msgWarn)
 		return
 	}
-	g.showMessage("A new planet. Tap a tile to choose your landing site")
+	g.showMessage("A new planet. Tap a tile to choose your landing site", msgInfo)
 }

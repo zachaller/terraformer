@@ -32,13 +32,18 @@ type Tile struct {
 	Height float64
 	// Temp is surface temperature in °C.
 	Temp float64
-	// Heat is extra warming from machines, in °C added to the tile's
-	// equilibrium temperature.
+	// Heat is fixed extra warming set with AddHeat (used for demos and
+	// tests), in °C added to the tile's equilibrium temperature. Heater
+	// buildings add their warmth separately; see Planet.TotalHeat.
 	Heat float64
 	// Ice and Water are amounts of frozen and liquid water, as a depth.
 	Ice, Water float64
 	// Life is microbial coverage in [0, 1].
 	Life float64
+	// Ore is the size of the tile's ore deposit, mined by mines.
+	Ore float64
+	// Pollution from industry; life can't survive where it's high.
+	Pollution float64
 }
 
 // Kind classifies the tile's terrain by elevation.
@@ -72,6 +77,8 @@ type Planet struct {
 	// releases, scaled so melting all the starting ice adds maxReleasedCO2.
 	co2PerIce float64
 
+	eco economy
+
 	// Scratch buffers reused by Step.
 	nextTemp, nextLife, flow []float64
 }
@@ -96,6 +103,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 		nextTemp:   make([]float64, cells),
 		nextLife:   make([]float64, cells),
 		flow:       make([]float64, cells),
+		eco:        newEconomy(cells),
 	}
 	totalIce := 0.0
 	for idx := range p.Tiles {
@@ -107,7 +115,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 		p.cosLat[idx] = math.Sqrt(1 - d.Y*d.Y)
 
 		h := fbm(seed, d.Scale(2.2), 5)
-		t := Tile{Height: h, Ice: startingIce(seed, d, h)}
+		t := Tile{Height: h, Ice: startingIce(seed, d, h), Ore: startingOre(seed, d)}
 		p.Tiles[idx] = t
 		totalIce += t.Ice
 	}
@@ -120,6 +128,15 @@ func NewPlanet(n int, seed uint64) *Planet {
 
 // Tile returns the tile at c.
 func (p *Planet) Tile(c Cell) Tile { return p.Tiles[p.Grid.Index(c)] }
+
+// startingOre scatters ore deposits over roughly a tenth of the planet.
+func startingOre(seed uint64, d Vec3) float64 {
+	n := fbm(seed^0x0BE, d.Scale(6), 3)
+	if n < 0.3 {
+		return 0
+	}
+	return 100 + 400*(n-0.3)
+}
 
 // startingIce places polar caps with a ragged edge, snow on peaks, and a
 // little permafrost everywhere else (most in low basins).

@@ -1,6 +1,6 @@
 # Terraformer: Tech Stack & Architecture
 
-Status: decided. Roadmap steps 1–3 are built; see README.md.
+Status: decided. Roadmap steps 1–4 are built; see README.md.
 
 ## The game in one paragraph
 
@@ -132,6 +132,20 @@ and processing buildings in a fixed order so results stay deterministic. A simpl
 greedy pass is enough to start; a proper max-flow solver is only needed if
 capacity-limited routing turns out to matter for gameplay.
 
+### Economy as built (step 4)
+
+- Buildings and their numbers live in one table, `sim.Specs` in
+  `sim/buildings.go` (moving to data files later is still the plan).
+- Each step, `sim/economy.go` regroups buildings into networks when links
+  change (union-find), shares power within each network (machines run at the
+  supplied/demanded ratio), runs each machine as fast as power, inputs,
+  output space and ore allow, then moves resources: a network with the lander
+  pools output into the colony stores and feeds consumers from them; one
+  without passes output directly from producers to consumers in tile order.
+- Links have a maximum length and a per-tile cost, but no throughput limit yet.
+- Pollution is emitted by mines and smelters, drifts to neighbours and decays;
+  above 0.25 a tile can't support life.
+
 ## Play Store checklist (for later)
 
 - Google Play developer account (one-time $25 fee).
@@ -149,7 +163,7 @@ capacity-limited routing turns out to matter for gameplay.
 2. ✅ **Globe prototype on a phone:** same thing via `ebitenmobile`; runs smoothly
    at 120 FPS on the developer's phone.
 3. ✅ **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
-4. **Economy core:** a mine, a smelter, a power source and links between them;
+4. ✅ **Economy core:** a mine, a smelter, a power source and links between them;
    network flow in `sim/` with tests.
 5. **First playable:** build a small production chain that powers one
    terraforming machine, and watch the planet change and the first life appear.

@@ -14,6 +14,7 @@ const (
 	viewTemp
 	viewWater
 	viewLife
+	viewIndustry
 	numViews
 )
 
@@ -27,6 +28,8 @@ func (v viewMode) String() string {
 		return "Water"
 	case viewLife:
 		return "Life"
+	case viewIndustry:
+		return "Industry"
 	}
 	return "?"
 }
@@ -50,15 +53,19 @@ var (
 	iceColor   = rgb{230, 238, 248}
 	waterColor = rgb{30, 80, 160}
 	lifeColor  = rgb{60, 140, 60}
-	heatColor  = rgb{255, 90, 40}
+	oreColor   = rgb{230, 180, 60}
+	smogColor  = rgb{75, 55, 70}
 	greyColor  = rgb{70, 70, 75}
 )
 
 // fillAtlas writes the planet into pix, the RGBA pixels of the tile atlas the
-// shader reads: 6 faces side by side, N×N pixels each, one pixel per tile.
+// shader reads. It is 6N×2N: 6 faces side by side, N×N pixels each, one pixel
+// per tile. The top half holds tile colours; the bottom half holds building
+// data (red: building type + 1, or 0 for none; green: activity).
 func fillAtlas(pix []byte, p *sim.Planet, v viewMode) {
 	n := p.Grid.N
 	stride := sim.Faces * n
+	clear(pix[len(pix)/2:])
 	for idx, t := range p.Tiles {
 		c := p.Grid.CellAt(idx)
 		off := (c.J*stride + c.Face*n + c.I) * 4
@@ -67,6 +74,13 @@ func fillAtlas(pix []byte, p *sim.Planet, v viewMode) {
 		pix[off+1] = uint8(col[1])
 		pix[off+2] = uint8(col[2])
 		pix[off+3] = 255
+		pix[len(pix)/2+off+3] = 255
+	}
+	for _, b := range p.Buildings() {
+		c := p.Grid.CellAt(b.Tile)
+		off := len(pix)/2 + (c.J*stride+c.Face*n+c.I)*4
+		pix[off] = uint8(b.Type) + 1
+		pix[off+1] = uint8(b.Activity * 255)
 	}
 }
 
@@ -86,6 +100,12 @@ func tileColor(t sim.Tile, v viewMode) rgb {
 			c = mix(c, rgb{80, 220, 80}, 0.3+0.7*t.Life)
 		}
 		return c
+	case viewIndustry:
+		c := mix(greyColor, rgb{120, 120, 125}, (t.Height+1)/2)
+		if t.Ore > 0 {
+			c = mix(c, oreColor, 0.5+t.Ore/600)
+		}
+		return mix(c, smogColor, t.Pollution*1.5)
 	}
 	return surfaceColor(t)
 }
@@ -95,7 +115,10 @@ func surfaceColor(t sim.Tile) rgb {
 	// Vary brightness a little with height so flat regions aren't uniform.
 	shade := 0.85 + 0.3*(t.Height+1)/2
 	c := rgb{base[0] * shade, base[1] * shade, base[2] * shade}
-	c = mix(c, heatColor, t.Heat/100*0.35)
+	if t.Ore > 0 {
+		c = mix(c, rgb{80, 105, 140}, 0.4) // ore deposit
+	}
+	c = mix(c, smogColor, t.Pollution)
 	c = mix(c, rgb{c[0] * 0.75, c[1] * 0.75, c[2] * 0.75}, t.Water/0.05) // damp soil
 	c = mix(c, lifeColor, t.Life*0.75)
 	c = mix(c, waterColor, (t.Water-0.05)*4*0.85) // standing water

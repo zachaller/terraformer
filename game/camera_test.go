@@ -7,13 +7,6 @@ import (
 	"github.com/zachaller/terraformer/sim"
 )
 
-// project is the inverse of pick: where planet direction d appears on screen,
-// and whether it faces the viewer.
-func (c *camera) project(d sim.Vec3) (x, y float64, visible bool) {
-	vx, vy, vz := c.rot[0].Dot(d), c.rot[1].Dot(d), c.rot[2].Dot(d)
-	return c.cx + vx*c.radius, c.cy - vy*c.radius, vz > 0
-}
-
 func TestPickInvertsProject(t *testing.T) {
 	g := sim.Grid{N: 16}
 	c := newCamera()

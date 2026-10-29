@@ -106,6 +106,13 @@ func (c *camera) pick(g sim.Grid, x, y float64) (sim.Cell, bool) {
 	return g.CellFromDir(d), true
 }
 
+// project is the inverse of pick: where planet direction d appears on screen,
+// and whether it faces the viewer.
+func (c *camera) project(d sim.Vec3) (x, y float64, visible bool) {
+	vx, vy, vz := c.rot[0].Dot(d), c.rot[1].Dot(d), c.rot[2].Dot(d)
+	return c.cx + vx*c.radius, c.cy - vy*c.radius, vz > 0
+}
+
 func mul3(a, b [3][3]float64) [3][3]float64 {
 	var m [3][3]float64
 	for i := range 3 {

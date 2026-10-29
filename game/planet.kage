@@ -3,8 +3,9 @@
 package main
 
 // Draws the starfield and the planet as a ray-traced sphere on one screen quad.
-// Source image 0 is the tile atlas: 6 faces side by side, N×N pixels each,
-// one pixel per tile.
+// Source image 0 is the tile atlas, 6N×2N: 6 faces side by side, N×N pixels
+// each, one pixel per tile. The top half is tile colour; the bottom half is
+// building data (red: type + 1, or 0 for none; green: activity 0..1).
 
 var Center vec2   // planet centre on screen, pixels
 var Radius float  // planet radius on screen, pixels
@@ -35,6 +36,45 @@ func faceUV(d vec3) vec3 {
 		return vec3(4, d.x/a.z, d.y/a.z)
 	}
 	return vec3(5, -d.x/a.z, d.y/a.z)
+}
+
+// building returns the colour (rgb) and coverage (a) of building type bt at
+// tile-local position p, each axis in [-0.5, 0.5].
+// Types follow sim.BuildingType + 1.
+func building(bt float, p vec2) vec4 {
+	r := length(p)
+	box := max(abs(p.x), abs(p.y))
+	if bt == 1 { // lander: white disc with a cyan core
+		if r < 0.18 {
+			return vec4(0.3, 0.85, 1, 1)
+		}
+		return vec4(0.95, 0.95, 1, step(r, 0.4))
+	}
+	if bt == 2 { // solar: blue panel with a grid
+		gp := fract((p + 0.5) * 3)
+		line := step(min(gp.x, gp.y), 0.12)
+		return vec4(mix(vec3(0.1, 0.2, 0.55), vec3(0.5, 0.65, 0.9), line), step(box, 0.4))
+	}
+	if bt == 3 { // mine: grey diamond with a dark pit
+		d := abs(p.x) + abs(p.y)
+		if d < 0.16 {
+			return vec4(0.12, 0.1, 0.1, 1)
+		}
+		return vec4(0.55, 0.55, 0.6, step(d, 0.45))
+	}
+	if bt == 4 { // smelter: orange block with a chimney
+		if abs(p.x-0.18) < 0.08 && p.y > 0.05 && p.y < 0.45 {
+			return vec4(0.2, 0.2, 0.22, 1)
+		}
+		return vec4(0.95, 0.5, 0.12, step(max(abs(p.x), abs(p.y+0.08)), 0.3))
+	}
+	if bt == 5 { // heater: red ring around a hot core
+		if r < 0.16 {
+			return vec4(1, 0.85, 0.3, 1)
+		}
+		return vec4(0.95, 0.25, 0.12, step(0.24, r)*step(r, 0.42))
+	}
+	return vec4(0)
 }
 
 func hash(p vec2) float {
@@ -77,6 +117,22 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	lineAmt := 1 - clamp(edge, 0, 1)
 	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.3
 	base *= 1 - lineAmt*strength
+
+	bdata := imageSrc0UnsafeAt(texel + vec2(0, N))
+	bt := floor(bdata.r*255 + 0.5)
+	if bt > 0 {
+		b := building(bt, g-0.5)
+		// Idle buildings (unpowered, starved or full) pulse red.
+		if bdata.g < 0.05 {
+			b.rgb = mix(b.rgb, vec3(0.8, 0.1, 0.1), 0.35+0.35*sin(Time*5))
+		}
+		// When tiles are too small on screen for the symbol to read,
+		// fill the whole tile with the building's colour instead.
+		if 2*Radius/N < 10 {
+			b.a = 1
+		}
+		base = mix(base, b.rgb, b.a)
+	}
 
 	if Selected.x >= 0 && f.x == Selected.x && ij.x == Selected.y && ij.y == Selected.z {
 		pulse := 0.5 + 0.5*sin(Time*6)

@@ -13,22 +13,28 @@ const (
 	soilRetention = 0.05 // water the ground holds as moisture instead of letting it flow
 	elevScale     = 2.0  // converts Height into the same units as water depth
 
-	lifeGrowth   = 0.01
-	lifeSpread   = 0.02
-	lifeDieback  = 0.01
-	lifeEmerge   = 0.002 // chance per step that life appears on a habitable, lifeless tile
-	lifeSeed     = 0.05  // coverage when life first appears
-	minLifeWater = 0.01
-	minLifeTemp  = -5.0
-	maxLifeTemp  = 60.0
+	lifeGrowth       = 0.01
+	lifeSpread       = 0.02
+	lifeDieback      = 0.01
+	lifeEmerge       = 0.002 // chance per step that life appears on a habitable, lifeless tile
+	lifeSeed         = 0.05  // coverage when life first appears
+	minLifeWater     = 0.01
+	minLifeTemp      = -5.0
+	maxLifeTemp      = 60.0
+	maxLifePollution = 0.25
+
+	pollutionSpread = 0.02  // share that drifts to each neighbour per step
+	pollutionDecay  = 0.001 // cleaned up naturally per step
 )
 
 // Step advances the simulation by one tick. It is deterministic: the same
 // planet state always produces the same next state.
 func (p *Planet) Step() {
+	p.stepEconomy()
 	p.stepTemperature()
 	p.stepIce()
 	p.stepWater()
+	p.stepPollution()
 	p.stepLife()
 	p.Ticks++
 }
@@ -52,7 +58,7 @@ func (p *Planet) stepTemperature() {
 			avg += p.Tiles[nb].Temp
 		}
 		avg /= 4
-		target := p.equilibrium(idx) + t.Heat
+		target := p.equilibrium(idx) + p.TotalHeat(idx)
 		p.nextTemp[idx] = t.Temp + tempRelax*(target-t.Temp) + tempDiffusion*(avg-t.Temp)
 	}
 	for idx := range p.Tiles {
@@ -114,9 +120,32 @@ func (p *Planet) stepWater() {
 
 func freeWater(t *Tile) float64 { return math.Max(t.Water-soilRetention, 0) }
 
+// TotalHeat is the warming on tile idx from heaters this step, plus any
+// fixed extra heat set with AddHeat.
+func (p *Planet) TotalHeat(idx int) float64 {
+	return p.Tiles[idx].Heat + p.eco.machineHeat[idx]
+}
+
+// stepPollution lets pollution drift to neighbours and slowly break down.
+func (p *Planet) stepPollution() {
+	clear(p.flow)
+	for idx := range p.Tiles {
+		out := p.Tiles[idx].Pollution * pollutionSpread
+		for _, nb := range p.neighbors[idx] {
+			p.flow[nb] += out
+			p.flow[idx] -= out
+		}
+	}
+	for idx := range p.Tiles {
+		t := &p.Tiles[idx]
+		t.Pollution = math.Max(t.Pollution+p.flow[idx]-pollutionDecay, 0)
+	}
+}
+
 // Habitable reports whether microbes can live on t.
 func Habitable(t Tile) bool {
-	return t.Temp > minLifeTemp && t.Temp < maxLifeTemp && t.Water > minLifeWater
+	return t.Temp > minLifeTemp && t.Temp < maxLifeTemp && t.Water > minLifeWater &&
+		t.Pollution < maxLifePollution
 }
 
 // stepLife grows microbes where conditions suit them, spreads them to

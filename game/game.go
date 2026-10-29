@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"math"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/zachaller/terraformer/sim"
 )
 
@@ -23,17 +25,26 @@ var planetShaderSrc []byte
 // is always lit.
 var lightDir = sim.Vec3{X: -0.5, Y: 0.5, Z: 0.75}.Normalize()
 
-// heaterPower is how much the heater tool warms a tile per tap, in °C.
-const heaterPower = 30
+// demoHeat is how much each demo heater warms its tile, in °C.
+const demoHeat = 30
+
+// messageTime is how long a message stays on screen, in seconds.
+const messageTime = 4
 
 // Options configure a new Game.
 type Options struct {
 	Seed     uint64
 	GridSize int // cells per cube face edge
 
-	// DemoSteps, if positive, places a ring of heaters around the equator and
-	// fast-forwards this many simulation steps before the game starts.
+	// DemoHeaters puts fixed warmth on a ring of tiles around the equator.
+	DemoHeaters bool
+	// DemoColony lands and builds a small working colony facing the camera.
+	DemoColony bool
+	// DemoSteps fast-forwards this many simulation steps before the game
+	// starts.
 	DemoSteps int
+	// Zoom is the starting zoom (1 fits the planet on screen).
+	Zoom float64
 	// View is the starting view: surface, temperature, water or life.
 	View string
 
@@ -60,6 +71,10 @@ type Game struct {
 	selected *sim.Cell
 
 	tool     tool
+	menuOpen bool
+	linkFrom *sim.Cell // first end of a link being made
+	message  string
+	msgUntil int // tick the message disappears
 	view     viewMode
 	speed    int     // index into speeds
 	stepDebt float64 // fractional simulation steps owed
@@ -81,35 +96,32 @@ func New(opts Options) (*Game, error) {
 		opts:       opts,
 		planet:     p,
 		shader:     shader,
-		atlas:      ebiten.NewImage(sim.Faces*n, n),
-		atlasPix:   make([]byte, sim.Faces*n*n*4),
+		atlas:      ebiten.NewImage(sim.Faces*n, 2*n),
+		atlasPix:   make([]byte, sim.Faces*n*2*n*4),
 		atlasDirty: true,
 		cam:        newCamera(),
 		speed:      1,
+		tool:       toolLand,
 	}
 	for v := range numViews {
 		if strings.EqualFold(opts.View, v.String()) || (opts.View == "temp" && v == viewTemp) {
 			g.view = v
 		}
 	}
-	if opts.DemoSteps > 0 {
+	if opts.Zoom > 0 {
+		g.cam.zoom = opts.Zoom
+	}
+	if opts.DemoHeaters {
 		placeDemoHeaters(p)
-		for range opts.DemoSteps {
-			p.Step()
-		}
+	}
+	if opts.DemoColony {
+		placeDemoColony(p, g.cam.rot[2])
+		g.tool = toolInspect
+	}
+	for range opts.DemoSteps {
+		p.Step()
 	}
 	return g, nil
-}
-
-// placeDemoHeaters puts a ring of heaters around the equator: enough to tip
-// the planet into runaway warming.
-func placeDemoHeaters(p *sim.Planet) {
-	for idx := range p.Tiles {
-		c := p.Grid.CellAt(idx)
-		if d := p.Grid.DirFromCell(c); math.Abs(d.Y) < 0.05 && idx%7 == 0 {
-			p.AddHeat(c, heaterPower)
-		}
-	}
 }
 
 func (g *Game) Update() error {
@@ -136,6 +148,13 @@ func (g *Game) Update() error {
 
 	if g.opts.ScreenshotPath != "" && g.ticks == 2 {
 		g.selectAt(g.cam.cx, g.cam.cy)
+		if bs := g.planet.Buildings(); len(bs) > 0 {
+			c := g.planet.Grid.CellAt(bs[len(bs)-1].Tile)
+			g.selected = &c
+		}
+	}
+	if g.ticks == 1 && !g.planet.Landed() {
+		g.showMessage("Tap a tile to choose your landing site")
 	}
 
 	g.stepDebt += speeds[g.speed].steps / float64(ebiten.TPS())
@@ -149,9 +168,19 @@ func (g *Game) Update() error {
 
 // handleKeys provides desktop shortcuts for the on-screen buttons.
 func (g *Game) handleKeys() {
+	if g.planet.Landed() {
+		for i, t := range menuTools {
+			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
+				g.setTool(t)
+			}
+		}
+	}
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyH):
-		g.tool = 1 - g.tool
+	case inpututil.IsKeyJustPressed(ebiten.KeyB) && g.planet.Landed():
+		g.menuOpen = !g.menuOpen
+	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
+		g.menuOpen = false
+		g.linkFrom = nil
 	case inpututil.IsKeyJustPressed(ebiten.KeyV):
 		g.view = (g.view + 1) % numViews
 		g.atlasDirty = true
@@ -173,11 +202,71 @@ func (g *Game) layoutCamera() {
 	g.cam.layoutIn(l, t, float64(g.w)-l-r, float64(g.h)-t-b)
 }
 
+func (g *Game) showMessage(m string) {
+	g.message = m
+	g.msgUntil = g.ticks + messageTime*ebiten.TPS()
+}
+
+// tapPlanet selects the tapped tile and applies the current tool to it.
 func (g *Game) tapPlanet(x, y float64) {
+	g.menuOpen = false
 	g.selectAt(x, y)
-	if g.selected != nil && g.tool == toolHeat {
-		g.planet.AddHeat(*g.selected, heaterPower)
-		g.atlasDirty = true
+	if g.selected == nil {
+		g.linkFrom = nil
+		return
+	}
+	c := *g.selected
+	p := g.planet
+	g.atlasDirty = true
+
+	if bt, ok := g.tool.building(); ok {
+		if _, err := p.Build(bt, c); err != nil {
+			g.showMessage(err.Error())
+		} else {
+			g.showMessage(fmt.Sprintf("Built %v. Use Link to connect it", bt))
+		}
+		return
+	}
+	switch g.tool {
+	case toolLand:
+		if err := p.Land(c); err != nil {
+			g.showMessage(err.Error())
+			return
+		}
+		g.tool = toolInspect
+		g.showMessage("Landed! Open the Tool menu to build")
+	case toolDemolish:
+		if err := p.Demolish(c); err != nil {
+			g.showMessage(err.Error())
+		} else {
+			g.showMessage("Demolished (half the metal refunded)")
+		}
+	case toolLink:
+		g.tapLink(c)
+	}
+}
+
+// tapLink makes links one tap at a time: tap a building to start, then tap
+// another to link them. The second building becomes the start of the next
+// link, so chains are quick to make. Tapping empty ground cancels.
+func (g *Game) tapLink(c sim.Cell) {
+	p := g.planet
+	switch {
+	case p.BuildingAt(c) == nil:
+		g.linkFrom = nil
+		g.showMessage(sim.ErrNoBuilding.Error())
+	case g.linkFrom == nil || *g.linkFrom == c:
+		g.linkFrom = &c
+		g.showMessage("Now tap a building to link to")
+	default:
+		from := *g.linkFrom
+		cost := p.LinkCost(from, c)
+		if err := p.Link(from, c); err != nil {
+			g.showMessage(err.Error())
+			return
+		}
+		g.linkFrom = &c
+		g.showMessage(fmt.Sprintf("Linked (%.1f metal). Tap another to keep going", cost))
 	}
 }
 
@@ -197,6 +286,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.atlasDirty = false
 	}
 	g.drawPlanet(screen)
+	g.drawLinks(screen)
 	g.drawHUD(screen)
 	g.drawButtons(screen)
 
@@ -222,8 +312,8 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	}
 
 	sel := []float32{-1, 0, 0}
-	if g.selected != nil {
-		sel = []float32{float32(g.selected.Face), float32(g.selected.I), float32(g.selected.J)}
+	if c := g.highlighted(); c != nil {
+		sel = []float32{float32(c.Face), float32(c.I), float32(c.J)}
 	}
 	op := &ebiten.DrawTrianglesShaderOptions{}
 	op.Images[0] = g.atlas
@@ -241,26 +331,57 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
 }
 
+// highlighted is the tile to highlight: the start of a link being made, or
+// else the selected tile.
+func (g *Game) highlighted() *sim.Cell {
+	if g.tool == toolLink && g.linkFrom != nil {
+		return g.linkFrom
+	}
+	return g.selected
+}
+
+// drawLinks draws each link as a line hugging the planet's surface, hiding
+// the parts on the far side. Links in networks short of power are orange.
+func (g *Game) drawLinks(screen *ebiten.Image) {
+	const segments = 12
+	p := g.planet
+	s := float32(ebiten.Monitor().DeviceScaleFactor())
+	for _, l := range p.Links() {
+		a := p.Grid.DirFromCell(p.Grid.CellAt(l[0]))
+		b := p.Grid.DirFromCell(p.Grid.CellAt(l[1]))
+		clr := color.RGBA{90, 220, 255, 255}
+		if p.NetworkOf(p.BuildingAt(p.Grid.CellAt(l[0]))).PowerSatisfaction() < 1 {
+			clr = color.RGBA{255, 150, 40, 255}
+		}
+		px, py, pvis := g.cam.project(a)
+		for i := 1; i <= segments; i++ {
+			t := float64(i) / segments
+			d := a.Scale(1 - t).Add(b.Scale(t)).Normalize()
+			x, y, vis := g.cam.project(d)
+			if vis && pvis {
+				vector.StrokeLine(screen, float32(px), float32(py), float32(x), float32(y), 2*s, clr, true)
+			}
+			px, py, pvis = x, y, vis
+		}
+	}
+}
+
 func (g *Game) drawHUD(screen *ebiten.Image) {
 	p := g.planet
 	st := p.Stats()
-	msg := fmt.Sprintf("Day %d   Atmosphere %.2f kPa   Avg temp %.1fC\nIce %.0f   Water %.1f   Life on %.1f%% of tiles   FPS %.0f",
-		p.Ticks/10, p.Atmosphere, st.AvgTemp, st.Ice, st.Water, st.LifeCover*100, ebiten.ActualFPS())
+	stores := p.Stores()
+	msg := fmt.Sprintf("Day %d   Atmosphere %.2f kPa   Avg %.1fC   Life %.1f%%\nMetal %.1f   Ore %.1f   Ice %.0f   Water %.1f   FPS %.0f",
+		p.Ticks/10, p.Atmosphere, st.AvgTemp, st.LifeCover*100, stores[sim.Metal], stores[sim.Ore], st.Ice, st.Water, ebiten.ActualFPS())
 	if c := g.selected; c != nil {
-		t := p.Tile(*c)
-		msg += fmt.Sprintf("\n\nTile %d (%d, %d)  %v  height %+.2f\nTemp %.1fC  Ice %.2f  Water %.3f  Life %.0f%%",
-			c.Face, c.I, c.J, t.Kind(), t.Height, t.Temp, t.Ice, t.Water, t.Life*100)
-		if t.Heat > 0 {
-			msg += fmt.Sprintf("  Heater +%.0fC", t.Heat)
-		}
-		if sim.Habitable(t) {
-			msg += "\nConditions suit microbes"
-		}
+		msg += "\n\n" + g.tileInfo(*c)
+	}
+	if g.ticks < g.msgUntil {
+		msg += "\n\n> " + g.message
 	}
 	// The debug font is fixed-size, so draw it offscreen and scale it up to
 	// stay readable on high-DPI phone screens.
 	if g.hud == nil {
-		g.hud = ebiten.NewImage(480, 100)
+		g.hud = ebiten.NewImage(480, 160)
 	}
 	g.hud.Clear()
 	ebitenutil.DebugPrint(g.hud, msg)
@@ -270,6 +391,49 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	l, t, _, _ := currentSafeArea()
 	op.GeoM.Translate(l+8*s, t+8*s)
 	screen.DrawImage(g.hud, op)
+}
+
+// tileInfo describes a tile and any building on it for the HUD.
+func (g *Game) tileInfo(c sim.Cell) string {
+	p := g.planet
+	t := p.Tile(c)
+	idx := p.Grid.Index(c)
+	s := fmt.Sprintf("Tile %d (%d, %d)  %v  height %+.2f\nTemp %.1fC  Ice %.2f  Water %.3f  Life %.0f%%",
+		c.Face, c.I, c.J, t.Kind(), t.Height, t.Temp, t.Ice, t.Water, t.Life*100)
+	var extras []string
+	if t.Ore > 0 {
+		extras = append(extras, fmt.Sprintf("Ore deposit %.0f", t.Ore))
+	}
+	if t.Pollution > 0.01 {
+		extras = append(extras, fmt.Sprintf("Pollution %.2f", t.Pollution))
+	}
+	if h := p.TotalHeat(idx); h > 0.5 {
+		extras = append(extras, fmt.Sprintf("Heated +%.0fC", h))
+	}
+	if sim.Habitable(t) {
+		extras = append(extras, "Suits microbes")
+	}
+	if len(extras) > 0 {
+		s += "\n" + strings.Join(extras, "   ")
+	}
+
+	b := p.BuildingAt(c)
+	if b == nil {
+		return s
+	}
+	spec := b.Spec()
+	s += fmt.Sprintf("\n%s: running at %.0f%%", spec.Name, b.Activity*100)
+	for r := range sim.NumResources {
+		if b.In[r] > 0.005 || b.Out[r] > 0.005 {
+			s += fmt.Sprintf("   %v in %.1f out %.1f", sim.Resource(r), b.In[r], b.Out[r])
+		}
+	}
+	n := p.NetworkOf(b)
+	s += fmt.Sprintf("\nNetwork: %d buildings, power %.0f/%.0f", len(n.Members), n.PowerSupply, n.PowerDemand)
+	if !n.HasDepot {
+		s += ", not linked to the lander"
+	}
+	return s
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

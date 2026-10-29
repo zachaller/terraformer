@@ -38,7 +38,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			t.Fatalf("tile %d differs after loading", i)
 		}
 	}
-	if p.Stores() != q.Stores() || p.Atmosphere != q.Atmosphere || p.Ticks != q.Ticks || p.GoalsDone() != q.GoalsDone() {
+	if p.Stores() != q.Stores() || p.Air != q.Air || p.Ticks != q.Ticks || p.GoalsDone() != q.GoalsDone() {
 		t.Fatal("planet state differs after loading")
 	}
 	if len(p.Buildings()) != len(q.Buildings()) || len(p.Links()) != len(q.Links()) {

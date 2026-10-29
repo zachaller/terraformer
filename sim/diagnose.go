@@ -11,7 +11,9 @@ const (
 	StatusNoPower                      // stopped: its network has no power at all
 	StatusNoInput                      // stopped or slowed: waiting for an input resource
 	StatusOutputFull                   // stopped: nowhere for its output to go
-	StatusDepleted                     // stopped: its ore deposit is empty
+	StatusDepleted                     // stopped: its deposit (or ice) is used up
+	StatusNoWind                       // a wind turbine in air too thin to turn it
+	StatusIncoming                     // a comet on its way
 )
 
 // Status is a building's current condition, from the most recent step.
@@ -30,8 +32,14 @@ func (p *Planet) Diagnose(b *Building) Status {
 	st := Status{Supply: n.PowerSupply, Demand: n.PowerDemand}
 	power := n.PowerSatisfaction()
 	switch {
-	case s.Extracts && p.Tiles[b.Tile].Ore <= 0:
+	case s.Countdown > 0:
+		st.Kind = StatusIncoming
+		return st
+	case s.Site == DepositSite && p.Tiles[b.Tile].Ore <= 0, s.Site == IceSite && p.Tiles[b.Tile].Ice <= 0:
 		st.Kind = StatusDepleted
+		return st
+	case s.Wind && p.WindFactor() < 0.05:
+		st.Kind = StatusNoWind
 		return st
 	case s.PowerIn > 0 && power == 0:
 		st.Kind = StatusNoPower
@@ -43,8 +51,9 @@ func (p *Planet) Diagnose(b *Building) Status {
 			return st
 		}
 	}
+	out := p.Output(b)
 	for r := range NumResources {
-		if out := s.Outputs[r]; out > 0 && b.Out[r]+out*power > bufferCap*1.0001 {
+		if out := out[r]; out > 0 && b.Out[r]+out*power > bufferCap*1.0001 {
 			st.Kind, st.Resource = StatusOutputFull, Resource(r)
 			return st
 		}

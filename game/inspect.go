@@ -11,7 +11,7 @@ import (
 
 // inspectOpen reports whether the inspect sheet is showing.
 func (g *Game) inspectOpen() bool {
-	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && !g.goalsOpen && g.planet.Landed()
+	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && !g.goalsOpen && !g.airOpen && g.planet.Landed()
 }
 
 // inspectSheet draws the inspect sheet along the bottom of the screen (from
@@ -114,6 +114,12 @@ func (g *Game) statusPill(u *ui, st sim.Status, right, y float64) {
 	case sim.StatusDepleted:
 		label, ic = "Empty", iconWarning
 		fill, fg = colCard, colIcon
+	case sim.StatusNoWind:
+		label, ic = "No wind", iconAir
+		fill, fg = colCard, colIcon
+	case sim.StatusIncoming:
+		label, ic = "Incoming", iconWarning
+		fill, fg = rgba(0x2E2414), rgba(0xF2C27A)
 	}
 	w := 10 + 14 + 6 + u.textW(label, sans, 12, semibold) + 10
 	x := right - w
@@ -145,12 +151,8 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	fill, border, fg := color.Color(colAmberBg), color.Color(colAmberLn), color.Color(colAmberTx)
 	switch st.Kind {
 	case sim.StatusRunning:
-		switch {
-		case spec.PowerOut > 0 && spec.Depot:
-			msg = fmt.Sprintf("Makes %.0f power and holds the colony's stores.", spec.PowerOut)
-		case spec.PowerOut > 0:
-			msg = fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
-		default:
+		msg = runningMessage(p, b)
+		if msg == "" {
 			return 0
 		}
 		fill, border, fg = colCard, rgba(0x2B374A), colBody
@@ -159,7 +161,7 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 			st.Supply/st.Demand*100, st.Supply, st.Demand)
 		fix = fmt.Sprintf("Add a Solar panel · %.0f metal", sim.Specs[sim.SolarPanel].Cost)
 		action = func() {
-			g.setTool(toolSolar)
+			g.setTool(buildTool(sim.SolarPanel))
 			g.showMessage("Tap a tile to place the solar panel, then link it into this network", msgInfo)
 		}
 	case sim.StatusNoPower:
@@ -171,8 +173,17 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	case sim.StatusOutputFull:
 		msg = fmt.Sprintf("Its %s has nowhere to go. Link it to the lander so it reaches the stores.", lower(st.Resource.String()))
 		fix, action = "Link it", linkIt
+	case sim.StatusNoWind:
+		msg = fmt.Sprintf("The air is too thin to turn it (%s kPa). Wind turbines start working above 2 kPa and reach full power at 40.", pressure(p.Pressure()))
+	case sim.StatusIncoming:
+		days := (spec.Countdown - b.Timer) / 10
+		msg = fmt.Sprintf("A comet is on its way: impact in %d days. It brings water, nitrogen and CO2, and destroys anything within two tiles.", days)
+		fill, border, fg = colCard, rgba(0x2B374A), colBody
 	case sim.StatusDepleted:
-		msg = "This deposit is empty. Remove the mine and build a new one on ore (gold in the Industry view)."
+		msg = "This deposit is empty. Remove the mine and build a new one on another deposit (Industry view)."
+		if spec.Site == sim.IceSite {
+			msg = "The ice here is gone. Remove the drill and build it on another icy tile."
+		}
 		fix = fmt.Sprintf("Remove · +%.0f metal", spec.Cost/2)
 		action = func() {
 			if err := p.Demolish(c); err == nil {
@@ -199,7 +210,7 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 func (g *Game) diagnosisBody(u *ui, msg, fix string, action func(), x, y, w float64, st sim.Status) float64 {
 	y0 := y
 	fg := color.Color(colAmberTx)
-	if st.Kind == sim.StatusRunning {
+	if st.Kind == sim.StatusRunning || st.Kind == sim.StatusIncoming {
 		fg = colBody
 	}
 	y += u.paragraph(msg, x, y, w, 13, fg)
@@ -277,6 +288,8 @@ func (g *Game) lifeChecklist(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) flo
 		} else {
 			summary = "Still polluted. It clears slowly once industry moves away."
 		}
+	case !damp && g.planet.Pressure() < sim.TriplePoint:
+		summary = fmt.Sprintf("Too dry: the air (%s kPa) is too thin for liquid water, so ice turns straight to vapour. Thicken it past %.2f kPa.", pressure(g.planet.Pressure()), sim.TriplePoint)
 	case !damp:
 		summary = "Too dry. Melt ice here or uphill, so water reaches it."
 	}
@@ -285,13 +298,60 @@ func (g *Game) lifeChecklist(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) flo
 	return y - y0 + 12
 }
 
+// runningMessage describes what a building that's running normally does.
+func runningMessage(p *sim.Planet, b *sim.Building) string {
+	spec := b.Spec()
+	switch b.Type {
+	case sim.Lander:
+		return fmt.Sprintf("Makes %.0f power and holds the colony's stores.", spec.PowerOut)
+	case sim.SolarPanel, sim.Geothermal:
+		return fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
+	case sim.WindTurbine:
+		return fmt.Sprintf("Makes %.1f of its %.0f power in %s kPa of air.", spec.PowerOut*p.WindFactor(), spec.PowerOut, pressure(p.Pressure()))
+	case sim.IceDrill:
+		return "Melts ice into water for the colony's stores."
+	case sim.Electrolyser:
+		return fmt.Sprintf("Splits water into oxygen: +%.2f kPa a year.", spec.Emits.O2*3650)
+	case sim.GreenhouseFactory:
+		return fmt.Sprintf("Turns fluorite into super-greenhouse gas: +%.1f Pa a year. Each Pa warms the planet by several degrees.", spec.Emits.PFC*3650)
+	case sim.NitrogenPlant:
+		return fmt.Sprintf("Turns nitrate into nitrogen: +%.2f kPa a year.", spec.Emits.N2*3650)
+	case sim.DustSpreader:
+		return fmt.Sprintf("Dusts the ice up to %d tiles around, so it absorbs sunlight and melts.", spec.DustRings)
+	case sim.OrbitalMirror:
+		return fmt.Sprintf("Focuses extra sunlight here: +%.0f° on this tile, fading over %d tiles.", spec.Heat, spec.HeatRings)
+	case sim.MagneticShield:
+		return "Deflects the solar wind, so the air no longer escapes to space."
+	case sim.Biolab:
+		return fmt.Sprintf("Seeds life up to %d tiles around: it takes hold far faster here.", spec.SeedRings)
+	case sim.CarbonScrubber:
+		return fmt.Sprintf("Captures CO2 and locks it away: −%.2f kPa a year.", -spec.Emits.CO2*3650)
+	}
+	return ""
+}
+
 // tileFacts shows the tile's other numbers as small chips.
 func (g *Game) tileFacts(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) float64 {
 	chips := []chip{
 		{parts: []chipPart{iconPart(iconDrop, colBlue), labelPart("Ice"), numPart(fmt.Sprintf("%.2f", t.Ice), colText)}, fill: colCard},
 	}
+	if t.Water > 0.005 {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconDrop, colBlue), labelPart("Water"), numPart(fmt.Sprintf("%.2f", t.Water), colText)}, fill: colCard})
+	}
+	if t.DryIce > 0.005 {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconAir, colIcon), labelPart("Dry ice"), numPart(fmt.Sprintf("%.2f", t.DryIce), colText)}, fill: colCard})
+	}
+	if t.Dust > 0.01 {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconGlobe, rgba(0xB08A6A)), labelPart("Dust"), numPart(fmt.Sprintf("%.0f%%", t.Dust*100), colText)}, fill: colCard})
+	}
+	if t.Soil > 0.01 {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconLeaf, rgba(0x9C7A4E)), labelPart("Soil"), numPart(fmt.Sprintf("%.0f%%", t.Soil*100), colText)}, fill: colCard})
+	}
 	if t.Ore > 0 {
-		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, rgba(0xF2C04A)), labelPart("Ore"), numPart(fmt.Sprintf("%.0f", t.Ore), colText)}, fill: colCard})
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, mineralColor(t.Mineral)), labelPart(t.Mineral.String()), numPart(fmt.Sprintf("%.0f", t.Ore), colText)}, fill: colCard})
+	}
+	if t.Volcanic {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconThermo, rgba(0xE2553A)), labelPart("Volcanic")}, fill: colCard})
 	}
 	if h := g.planet.TotalHeat(g.planet.Grid.Index(c)); h > 0.5 {
 		chips = append(chips, chip{parts: []chipPart{iconPart(iconThermo, colAmber), labelPart("Heated"), numPart(fmt.Sprintf("+%.0f°", h), colAmber)}, fill: colCard})

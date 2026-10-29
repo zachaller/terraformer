@@ -40,6 +40,8 @@ type Options struct {
 	DemoHeaters bool
 	// DemoColony lands and builds a small working colony facing the camera.
 	DemoColony bool
+	// DemoShowcase, with DemoColony, also builds one of every building.
+	DemoShowcase bool
 	// DemoSteps fast-forwards this many simulation steps before the game
 	// starts.
 	DemoSteps int
@@ -94,8 +96,10 @@ type Game struct {
 	linkDrag *linkDrag // a link being dragged out
 
 	goalCollapsed bool
-	goalsOpen     bool      // the goals sheet is showing
-	metalHist     []float64 // metal produced so far, sampled each day
+	goalsOpen     bool         // the goals sheet is showing
+	airOpen       bool         // the atmosphere sheet is showing
+	buildTab      sim.Category // the build menu's category
+	metalHist     []float64    // metal produced so far, sampled each day
 
 	// planetTarget is the screen area (x, y, w, h in pixels) the UI leaves
 	// for the planet; planetArea eases towards it so the planet glides
@@ -142,7 +146,7 @@ func New(opts Options) (*Game, error) {
 		placeDemoHeaters(p)
 	}
 	if opts.DemoColony {
-		placeDemoColony(p, g.cam.rot[2])
+		placeDemoColony(p, g.cam.rot[2], opts.DemoShowcase)
 		g.tool = toolInspect
 	}
 	for range opts.DemoSteps {
@@ -270,9 +274,9 @@ func (g *Game) Update() error {
 func (g *Game) handleKeys() {
 	landed := g.planet.Landed()
 	if landed {
-		for i, t := range buildTools {
+		for i, bt := range []sim.BuildingType{sim.SolarPanel, sim.Mine, sim.Smelter, sim.HeaterMachine} {
 			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
-				g.setTool(t)
+				g.setTool(buildTool(bt))
 			}
 		}
 	}

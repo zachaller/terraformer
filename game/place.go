@@ -42,9 +42,9 @@ func (g *Game) confirmPlacement() {
 	})
 }
 
-// maxAreaCells is the most tiles a placement preview tints: three rings of
+// maxAreaCells is the most tiles a placement preview tints: four rings of
 // hexes. The shader has arrays of this size.
-const maxAreaCells = 36
+const maxAreaCells = 60
 
 // heatShownMin is the least warming, in °C, a heater preview tints a ring
 // for.
@@ -84,6 +84,27 @@ func (g *Game) placementArea(bt sim.BuildingType, c sim.Cell) ([]areaTint, color
 			out = append(out, areaTint{a.cell, full})
 		}
 		return out, rgba(0xB07CA0)
+	}
+	// Other area effects fade out linearly over their reach.
+	spec := sim.Specs[bt]
+	fade := func(rings int, col color.RGBA) ([]areaTint, color.RGBA) {
+		for _, a := range areaCells(g.planet.Grid, c, rings) {
+			out = append(out, areaTint{a.cell, math.Max(full*(1-float64(a.ring-1)/float64(rings)), 0.12)})
+		}
+		return out, col
+	}
+	switch {
+	case spec.HeatRings > 0:
+		return fade(spec.HeatRings, colAmber)
+	case spec.DustRings > 0:
+		return fade(spec.DustRings, rgba(0xB08A6A))
+	case spec.SeedRings > 0:
+		return fade(spec.SeedRings, colTeal)
+	case bt == sim.Comet:
+		for _, a := range areaCells(g.planet.Grid, c, 2) {
+			out = append(out, areaTint{a.cell, full})
+		}
+		return out, colRed
 	}
 	return nil, colAmber
 }
@@ -176,13 +197,55 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		}
 	case sim.Mine:
 		if t.Ore > 0 {
-			rows = append(rows, previewRow{iconMetal, rgba(0xF2C04A), "Ore deposit", fmt.Sprintf("%.0f · lasts ~%.0f days", t.Ore, t.Ore/spec.Outputs[sim.Ore]/10), colText})
+			rows = append(rows, previewRow{iconMetal, mineralColor(t.Mineral), t.Mineral.String(), fmt.Sprintf("%.0f · lasts ~%.0f days", t.Ore, t.Ore/spec.Extracts/10), colText})
 		}
 		warning = "Mines pollute their own tile: no microbes will grow here."
 	case sim.Smelter:
 		warning = "Smelters pollute up to 2 tiles around. Keep them away from heated ground."
-	case sim.SolarPanel:
+	case sim.SolarPanel, sim.Geothermal:
 		rows = append(rows, previewRow{iconBolt, colAmber, "Makes", fmt.Sprintf("%.0f power once linked", spec.PowerOut), colText})
+		if bt == sim.Geothermal && !t.Volcanic {
+			warning = "Geothermal plants need a volcanic tile (red in the Industry view)."
+		}
+	case sim.WindTurbine:
+		rows = append(rows, previewRow{iconBolt, colAmber, "Makes now", fmt.Sprintf("%.1f of %.0f power", spec.PowerOut*p.WindFactor(), spec.PowerOut), colText})
+		if p.WindFactor() < 0.2 {
+			warning = "The air is still thin: turbines make little power until it's several kPa."
+		}
+	case sim.IceDrill:
+		rows = append(rows, previewRow{iconDrop, colBlue, "Ice here", fmt.Sprintf("%.2f", t.Ice), colText})
+		if t.Ice < 0.05 {
+			warning = "Ice drills need ice to drill."
+		}
+	case sim.DustSpreader:
+		rows = append(rows, previewRow{iconAir, colIcon, "Dusts ice", fmt.Sprintf("up to %d tiles around", spec.DustRings), colText})
+		if t.DryIce <= 0 && t.Ice < 0.3 {
+			warning = "There's little ice here. Dust spreaders do most good on the polar caps."
+		}
+	case sim.GreenhouseFactory:
+		rows = append(rows, previewRow{iconThermo, colAmber, "Makes", fmt.Sprintf("+%.1f Pa a year of PFCs", spec.Emits.PFC*3650), rgba(0xFFD36B)})
+		rows = append(rows, previewRow{iconMetal, mineralColor(sim.Fluorite), "Fluorite in stores", fmt.Sprintf("%.1f", p.Stores()[sim.FluoriteRes]), colText})
+	case sim.Electrolyser:
+		rows = append(rows, previewRow{iconAir, colTeal, "Makes", fmt.Sprintf("+%.2f kPa a year of O2", spec.Emits.O2*3650), colText})
+		rows = append(rows, previewRow{iconDrop, colBlue, "Water in stores", fmt.Sprintf("%.1f", p.Stores()[sim.Water]), colText})
+	case sim.NitrogenPlant:
+		rows = append(rows, previewRow{iconAir, colBlue, "Makes", fmt.Sprintf("+%.2f kPa a year of N2", spec.Emits.N2*3650), colText})
+		rows = append(rows, previewRow{iconMetal, mineralColor(sim.Nitrate), "Nitrate in stores", fmt.Sprintf("%.1f", p.Stores()[sim.NitrateRes]), colText})
+	case sim.OrbitalMirror:
+		rows = append(rows, previewRow{iconThermo, colAmber, "Warms", fmt.Sprintf("+%.0f° here, fading over %d tiles", spec.Heat, spec.HeatRings), rgba(0xFFD36B)})
+		if t.DryIce > 0 {
+			rows = append(rows, previewRow{iconAir, colIcon, "Dry ice here", "will turn to CO2", colBlue})
+		}
+	case sim.MagneticShield:
+		rows = append(rows, previewRow{iconAir, colAmber, "Air lost now", fmt.Sprintf("%.3f kPa a year", p.EscapePerDay()*365), colText})
+	case sim.Biolab:
+		rows = append(rows, previewRow{iconLeaf, colTeal, "Seeds life", fmt.Sprintf("up to %d tiles around", spec.SeedRings), colText})
+	case sim.CarbonScrubber:
+		rows = append(rows, previewRow{iconAir, colCO2, "Removes", fmt.Sprintf("%.2f kPa a year of CO2", -spec.Emits.CO2*3650), colText})
+	case sim.Comet:
+		rows = append(rows, previewRow{iconDrop, colBlue, "Brings", "water, nitrogen and CO2", colText})
+		rows = append(rows, previewRow{iconWarning, colRed, "Strikes in", fmt.Sprintf("%d days", spec.Countdown/10), colText})
+		warning = "The impact destroys everything within two tiles and leaves a crater."
 	}
 	if spec.PowerIn > 0 && p.Landed() {
 		n := p.NetworkOf(p.Buildings()[0])

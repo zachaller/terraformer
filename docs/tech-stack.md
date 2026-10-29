@@ -99,24 +99,20 @@ regular check-ins on feel and performance.
 
 ## Simulation model (as built in step 3)
 
-All in `sim/step.go`, deterministic (seeded RNG, fixed tick of 10 steps per
-in-game day at 1x speed), about 0.5 ms per step for about 6,000 tiles on desktop.
+Deterministic (seeded RNG, fixed tick of 10 steps per in-game day at 1x
+speed), about 0.8 ms per step for about 6,000 tiles on desktop. Superseded in
+its details by the terraforming model below.
 
 - **Temperature:** each tile relaxes towards an equilibrium set by latitude,
-  the greenhouse effect (rises with atmospheric pressure), elevation and ice
-  cover (ice reflects sunlight), plus any heater warmth; heat also diffuses to
-  the six neighbours (five for the pentagons).
-- **Ice and water:** ice melts above 0 °C and water freezes below. The ice
-  holds frozen CO₂, so melting releases atmosphere: the global feedback loop.
+  the greenhouse effect, elevation and albedo, plus any heater warmth; heat
+  also diffuses to the six neighbours (five for the pentagons).
+- **Ice and water:** ice melts above 0 °C (if the air is above water's
+  triple point) and water freezes below.
 - **Water flow:** water above the soil's retained moisture (0.05) flows to
   lower neighbours. Pairwise exchange keeps total water exactly conserved.
 - **Life:** microbes appear by chance on tiles that are between -5 and 60 °C
   with some moisture, grow logistically, spread to neighbours, and die back
   when conditions turn bad.
-- **Tuning:** all rates are constants at the top of `sim/step.go`;
-  `maxReleasedCO2` in `sim/planet.go` controls how strong the CO₂ feedback is,
-  which decides how easily the planet tips into runaway warming. Currently a
-  ring of ~37 equatorial heaters tips it in about 150 days.
 
 ## Game design decisions
 
@@ -200,6 +196,52 @@ and dies back when conditions fail. Land: moss (above 0°, 1 kPa), grass
 but not flooded ground. Water (standing water 0.2+): plankton (2°), fish
 (8°, 20 kPa). Goals for moss, the seas, grasslands and forests extend the
 playthrough; the bot reaches forests at about 26 minutes at 1x.
+
+### Terraforming model (version 0.9)
+
+A plausible model of the mechanisms proposed for terraforming Mars, with
+timescales compressed so the whole arc fits a 5–10 hour game. Constants are
+grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
+`sim/buildings.go`.
+
+- **Atmosphere** (`sim/atmosphere.go`): partial pressures of CO₂, N₂ and O₂
+  in kPa, and PFCs in Pa. Greenhouse warming is 7 °C per doubling of
+  (1 + CO₂ kPa), 12 °C per doubling of (1 + PFC Pa), 1.5 °C per doubling of
+  (1 + pressure/10) for pressure broadening, and up to 10 °C from water
+  vapour. Thicker air also carries heat from the equator towards the poles.
+  PFCs break down slowly in sunlight, and without a running magnetic shield
+  every gas escapes at 0.0025% a day.
+- **Water**: liquid only above the triple point (0.62 kPa); below it, warmed
+  ice sublimates into the air and falls again as frost on freezing ground.
+  The boiling point follows Clausius–Clapeyron. Standing water evaporates
+  (faster when warm), damp ground more slowly; 70% of rain falls back where it
+  evaporated and the rest spreads over the planet, more on high ground, as
+  snow where it's freezing.
+- **CO₂ reservoirs**: dry ice in the polar caps is held at the CO₂ frost
+  point: the caps keep the air at the pressure where CO₂ would freeze at
+  their average temperature, releasing dry ice when warmed (warmest parts
+  first) and slowly freezing extra CO₂ back. The frost point is shifted per
+  planet so its caps hold exactly the starting 0.45 kPa, since the game's
+  temperatures run warmer than real Mars. The regolith holds 45 kPa more,
+  released from each tile once it's 8 °C warmer than at the start (all of it
+  60 °C beyond that). Around 3 kPa the greenhouse feedback overtakes the caps'
+  pull, and the planet tips into runaway warming to about 40 kPa.
+- **Albedo**: per tile, from terrain (dark basalt basins 0.16 to bright peaks
+  0.3), water (0.07), plants (0.14), and ice (0.5, down to 0.2 with dust). Each
+  0.01 less reflected warms a tile by 0.45 °C.
+- **Life** (`sim/life.go`): species need temperature, pressure, water, and now
+  nitrogen, oxygen, an ozone layer (full at 2 kPa of O₂) and soil, which
+  microbes and plants build. Photosynthesis turns CO₂ into O₂ in proportion to
+  plant cover; standing water locks CO₂ into carbonate rock. Biolabs make new
+  life much likelier to take hold nearby.
+- **Economy**: deposits of iron (smelted into metal), fluorite (for
+  greenhouse factories) and nitrate (for nitrogen plants), volcanic tiles
+  for geothermal power, and ice for drills. Building types unlock as goals
+  are completed (`BuildingSpec.UnlockedBy`). Comets are aimed like buildings
+  and strike after 30 days.
+- **Pacing** is checked by `TestPlaythrough`, whose bot plays every goal; the
+  test fails if it finishes in under two hours of game time at 1×, since
+  people take several times longer than the bot.
 
 ## Play Store checklist (for later)
 

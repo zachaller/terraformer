@@ -18,6 +18,7 @@ func main() {
 	flag.IntVar(&opts.GridSize, "size", 25, "hex grid size: steps along each icosahedron edge (tiles = 10·size² + 2)")
 	flag.BoolVar(&opts.DemoHeaters, "demo-heaters", false, "put fixed warmth on a ring of tiles around the equator")
 	flag.BoolVar(&opts.DemoColony, "demo-colony", false, "land and build a small working colony")
+	flag.BoolVar(&opts.DemoShowcase, "demo-showcase", false, "with -demo-colony, also build one of every building")
 	flag.IntVar(&opts.DemoSteps, "demo-steps", 0, "fast-forward this many simulation steps (10 = one day)")
 	flag.Float64Var(&opts.Zoom, "zoom", 1, "starting zoom")
 	flag.StringVar(&opts.View, "view", "surface", "starting view: surface, temp, water, life or industry")

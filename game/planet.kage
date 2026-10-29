@@ -33,8 +33,8 @@ var GridAt vec3      // planet-space centre of the patch where grid lines show
 var Ghost float
 var GhostType float
 var GhostOK float
-var Area [36]float
-var AreaAmt [36]float
+var Area [60]float
+var AreaAmt [60]float
 var AreaTint vec3
 
 // latticeWarpC and the two warp functions mirror sim's latticeWarp.
@@ -349,6 +349,129 @@ func building(bt float, p vec2, act float, aa float) vec4 {
 		o = paint(o, mix(vec3(0.75, 0.6, 0.35), vec3(1, 0.83, 0.42), act), cover(sdCircle(p, 0.12), aa))
 		return o
 	}
+	if bt == 6 { // ice drill: frosty pad, ice shards, derrick with a bobbing bit
+		o = paint(o, vec3(0.62, 0.74, 0.86), cover(sdHex(p, 0.38), aa))
+		o = paint(o, vec3(0.3, 0.42, 0.56), cover(sdHex(p, 0.38)+0.04, aa))
+		shards := min(min(sdSeg(p, vec2(-0.3, -0.1), vec2(-0.2, -0.3)), sdSeg(p, vec2(0.28, -0.2), vec2(0.16, -0.32))), sdSeg(p, vec2(0.25, 0.22), vec2(0.32, 0.05)))
+		o = paint(o, vec3(0.85, 0.94, 1), cover(shards-0.03, aa))
+		bob := 0.04 * sin(Time*8) * act
+		tower := min(min(sdSeg(p, vec2(-0.12, -0.15), vec2(0, 0.36)), sdSeg(p, vec2(0.12, -0.15), vec2(0, 0.36))), sdSeg(p, vec2(0, 0.36), vec2(0, -0.2+bob)))
+		o = paint(o, vec3(0.79, 0.83, 0.89), cover(tower-0.025, aa))
+		o = paint(o, vec3(0.35, 0.82, 0.96), cover(sdCircle(p-vec2(0, -0.2+bob), 0.06), aa))
+		return o
+	}
+	if bt == 7 { // electrolyser: two tanks joined by a pipe, oxygen bubbles rising
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdBox(p-vec2(0, -0.02), vec2(0.3, 0.04)), aa))
+		o = paint(o, vec3(0.32, 0.55, 0.9), cover(sdCircle(p-vec2(-0.2, 0), 0.17), aa))
+		o = paint(o, vec3(0.37, 0.83, 0.71), cover(sdCircle(p-vec2(0.2, 0), 0.17), aa))
+		o = paint(o, vec3(0.9, 0.95, 1), cover(sdCircle(p-vec2(-0.25, 0.06), 0.04), aa)*0.7)
+		o = paint(o, vec3(0.9, 0.95, 1), cover(sdCircle(p-vec2(0.15, 0.06), 0.04), aa)*0.7)
+		for i := 0; i < 3; i++ {
+			f := fract(Time*0.5 + float(i)/3)
+			o = paint(o, vec3(0.75, 1, 0.92), cover(sdCircle(p-vec2(0.2+0.06*sin(f*9+float(i)), 0.18+f*0.3), 0.035), aa)*(1-f)*act)
+		}
+		return o
+	}
+	if bt == 8 { // greenhouse factory: dark block, two stacks, warm haze
+		haze := min(sdCircle(p-vec2(-0.15, 0.36+0.08*fract(Time*0.4)), 0.08), sdCircle(p-vec2(0.2, 0.4+0.07*fract(Time*0.4+0.5)), 0.07))
+		o = paint(o, vec3(0.88, 0.48, 0.37), cover(haze, aa)*0.6*act)
+		o = paint(o, vec3(0.42, 0.36, 0.5), cover(sdBox(p-vec2(0, -0.12), vec2(0.4, 0.24)), aa))
+		o = paint(o, vec3(0.3, 0.26, 0.38), cover(sdBox(p-vec2(0, 0.08), vec2(0.4, 0.05)), aa))
+		o = paint(o, vec3(0.2, 0.18, 0.24), cover(min(sdBox(p-vec2(-0.15, 0.16), vec2(0.06, 0.16)), sdBox(p-vec2(0.2, 0.18), vec2(0.06, 0.18))), aa))
+		o = paint(o, vec3(0.69, 0.49, 0.91), cover(sdBox(p-vec2(-0.05, -0.18), vec2(0.22, 0.06)), aa))
+		return o
+	}
+	if bt == 9 { // nitrogen plant: three pale tanks on a pad
+		o = paint(o, vec3(0.45, 0.5, 0.58), cover(sdBox(p, vec2(0.42, 0.34)), aa))
+		tanks := min(min(sdCircle(p-vec2(-0.2, -0.1), 0.15), sdCircle(p-vec2(0.2, -0.1), 0.15)), sdCircle(p-vec2(0, 0.17), 0.15))
+		o = paint(o, vec3(0.5, 0.65, 0.91), cover(tanks, aa))
+		o = paint(o, vec3(0.72, 0.84, 1), cover(tanks+0.05, aa))
+		o = paint(o, vec3(0.5, 0.65, 0.91)*(0.7+0.3*act), cover(sdCircle(p-vec2(0, 0.17), 0.04), aa))
+		return o
+	}
+	if bt == 10 { // dust spreader: dark mound with a spinning arm flinging dust
+		o = paint(o, vec3(0.55, 0.41, 0.31), cover(sdCircle(p, 0.3), aa))
+		o = paint(o, vec3(0.38, 0.27, 0.2), cover(sdCircle(p, 0.2), aa))
+		a := Time * 2 * act
+		dir := vec2(cos(a), sin(a))
+		o = paint(o, vec3(0.79, 0.83, 0.89), cover(sdSeg(p, -dir*0.36, dir*0.36)-0.03, aa))
+		for i := 0; i < 4; i++ {
+			f := fract(Time*0.7 + float(i)/4)
+			b := a + float(i)*1.57
+			o = paint(o, vec3(0.6, 0.45, 0.33), cover(sdCircle(p-vec2(cos(b), sin(b))*(0.3+f*0.15), 0.03), aa)*(1-f)*act)
+		}
+		return o
+	}
+	if bt == 11 { // wind turbine: mast and three turning blades
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdSeg(p, vec2(0, -0.45), vec2(0, 0))-0.03, aa))
+		a := Time * 3 * act
+		blades := 1.0
+		for i := 0; i < 3; i++ {
+			b := a + float(i)*2.094
+			blades = min(blades, sdSeg(p, vec2(0), vec2(cos(b), sin(b))*0.42))
+		}
+		o = paint(o, vec3(0.92, 0.94, 0.97), cover(blades-0.035, aa))
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdCircle(p, 0.07), aa))
+		return o
+	}
+	if bt == 12 { // geothermal: dark rock, glowing vent, steam
+		o = paint(o, vec3(0.25, 0.2, 0.2), cover(sdHex(p, 0.4), aa))
+		glow := 0.8 + 0.2*sin(Time*4)
+		o = paint(o, vec3(0.9, 0.3, 0.15)*glow, cover(sdCircle(p, 0.17), aa))
+		o = paint(o, vec3(1, 0.75, 0.3)*glow, cover(sdCircle(p, 0.08), aa))
+		steam := sdCircle(p-vec2(0.05, 0.25+0.15*fract(Time*0.5)), 0.08)
+		o = paint(o, vec3(0.85, 0.87, 0.9), cover(steam, aa)*0.6*(1-fract(Time*0.5)))
+		return o
+	}
+	if bt == 13 { // orbital mirror's focus: a bright spot with rays
+		pulse := 0.85 + 0.15*sin(Time*2)
+		o = paint(o, vec3(1, 0.9, 0.55), cover(sdCircle(p, 0.46), aa)*0.25*pulse)
+		rays := 1.0
+		for i := 0; i < 8; i++ {
+			a := float(i)*0.785 + Time*0.3
+			rays = min(rays, sdSeg(p, vec2(cos(a), sin(a))*0.22, vec2(cos(a), sin(a))*0.4))
+		}
+		o = paint(o, vec3(1, 0.85, 0.4), cover(rays-0.02, aa))
+		o = paint(o, vec3(1, 0.97, 0.8), cover(sdCircle(p, 0.15), aa))
+		return o
+	}
+	if bt == 14 { // comet target: red crosshair, closing in as impact nears
+		r := 0.45 - 0.3*act
+		o = paint(o, vec3(1, 0.42, 0.36), cover(abs(sdCircle(p, r))-0.025, aa))
+		cross := min(sdSeg(p, vec2(-0.45, 0), vec2(-0.12, 0)), min(sdSeg(p, vec2(0.12, 0), vec2(0.45, 0)), min(sdSeg(p, vec2(0, -0.45), vec2(0, -0.12)), sdSeg(p, vec2(0, 0.12), vec2(0, 0.45)))))
+		o = paint(o, vec3(1, 0.42, 0.36), cover(cross-0.02, aa)*(0.6+0.4*sin(Time*6)))
+		return o
+	}
+	if bt == 15 { // magnetic shield: emitter dome inside turning field rings
+		a := Time * 1.5
+		for i := 0; i < 3; i++ {
+			r := 0.2 + float(i)*0.1
+			ring := abs(sdCircle(p, r)) - 0.015
+			arc := sin(atan2(p.y, p.x)*2 + a*(1+float(i)*0.5))
+			o = paint(o, vec3(0.45, 0.65, 1), cover(ring, aa)*smoothstep(-0.2, 0.6, arc)*act)
+		}
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdCircle(p, 0.15), aa))
+		o = paint(o, vec3(0.75, 0.88, 1), cover(sdCircle(p-vec2(-0.04, 0.04), 0.07), aa))
+		return o
+	}
+	if bt == 17 { // carbon scrubber: a block of fans pulling air through
+		o = paint(o, vec3(0.33, 0.38, 0.43), cover(sdBox(p, vec2(0.38, 0.3)), aa))
+		for i := 0; i < 3; i++ {
+			c := vec2(-0.22+float(i)*0.22, 0)
+			o = paint(o, vec3(0.16, 0.19, 0.23), cover(sdCircle(p-c, 0.09), aa))
+			a := Time*6*act + float(i)
+			o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdSeg(p-c, vec2(cos(a), sin(a))*0.08, -vec2(cos(a), sin(a))*0.08)-0.015, aa))
+		}
+		return o
+	}
+	if bt == 16 { // biolab: glass dome with plants inside
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdCircle(p, 0.4), aa))
+		o = paint(o, vec3(0.16, 0.3, 0.3), cover(sdCircle(p, 0.34), aa))
+		leaves := min(min(sdCircle(p-vec2(-0.12, -0.05), 0.1), sdCircle(p-vec2(0.1, 0.06), 0.12)), sdCircle(p-vec2(0, -0.17), 0.08))
+		o = paint(o, vec3(0.3, 0.7, 0.35), cover(leaves, aa))
+		o = paint(o, vec3(0.85, 0.95, 1), cover(sdSeg(p, vec2(-0.2, 0.22), vec2(-0.05, 0.3))-0.02, aa)*0.6)
+		return o
+	}
 	return o
 }
 
@@ -525,7 +648,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	if Ghost >= 0 {
 		// Tint the tiles the new building would heat or pollute.
-		for i := 0; i < 36; i++ {
+		for i := 0; i < 60; i++ {
 			if Area[i] == tile {
 				base = mix(base, AreaTint, AreaAmt[i])
 			}

@@ -71,26 +71,27 @@ func TestStepDeterministic(t *testing.T) {
 			t.Fatalf("tile %d differs after identical runs", i)
 		}
 	}
-	if a.Atmosphere != b.Atmosphere {
+	if a.Air != b.Air {
 		t.Fatal("atmosphere differs after identical runs")
 	}
 }
 
 func TestWaterConserved(t *testing.T) {
 	p := NewPlanet(16, 5)
+	p.Air.CO2 = 3 // thick enough for liquid water, rain and snow
 	for f := range Diamonds {
 		p.AddHeat(Cell{Diamond: f, I: 8, J: 8}, maxHeat)
 	}
 	total := func() float64 {
 		s := p.Stats()
-		return s.Ice + s.Water
+		return s.Ice + s.Water + p.Vapour
 	}
 	before := total()
 	for range 2000 {
 		p.Step()
 	}
 	if after := total(); math.Abs(after-before) > 1e-6*before {
-		t.Fatalf("ice+water went from %v to %v", before, after)
+		t.Fatalf("ice+water+vapour went from %v to %v", before, after)
 	}
 	if p.Stats().Water == 0 {
 		t.Fatal("heating melted no ice")
@@ -117,8 +118,8 @@ func TestHeatMeltsIceAndThickensAtmosphere(t *testing.T) {
 	if tile.Ice >= iceBefore {
 		t.Fatalf("heated tile's ice didn't melt: %v -> %v", iceBefore, tile.Ice)
 	}
-	if p.Atmosphere <= startAtmosphere {
-		t.Fatalf("melting released no CO₂: atmosphere %v kPa", p.Atmosphere)
+	if p.Pressure() <= startAir.Pressure() {
+		t.Fatalf("melting released no CO₂: atmosphere %v kPa", p.Pressure())
 	}
 }
 
@@ -165,8 +166,10 @@ func TestLifeAppearsWhenHabitableAndDiesWhenNot(t *testing.T) {
 }
 
 func TestHeatedBasinGrowsLife(t *testing.T) {
-	// End to end: heating a basin melts its permafrost, and microbes appear.
-	p := NewPlanet(32, 7)
+	// End to end: in air thick enough for liquid water, heating a basin
+	// melts its permafrost, and microbes appear.
+	p := NewPlanet(25, 7)
+	p.Air.CO2 = 2
 	var basin Cell
 	found := false
 	for idx, tile := range p.Tiles {

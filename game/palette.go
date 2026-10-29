@@ -1,6 +1,7 @@
 package game
 
 import (
+	"image/color"
 	"math"
 
 	"github.com/zachaller/terraformer/sim"
@@ -50,12 +51,12 @@ var (
 		sim.Highlands: {140, 115, 96},
 		sim.Peaks:     {200, 190, 180},
 	}
-	iceColor   = rgb{230, 238, 248}
-	waterColor = rgb{30, 80, 160}
-	lifeColor  = rgb{60, 140, 60}
-	oreColor   = rgb{230, 180, 60}
-	smogColor  = rgb{75, 55, 70}
-	greyColor  = rgb{70, 70, 75}
+	iceColor    = rgb{230, 238, 248}
+	dryIceColor = rgb{246, 249, 255}
+	waterColor  = rgb{30, 80, 160}
+	lifeColor   = rgb{60, 140, 60}
+	smogColor   = rgb{75, 55, 70}
+	greyColor   = rgb{70, 70, 75}
 
 	// speciesColors is how each species tints the surface, from the UX
 	// mocks' life sheet: land shifts olive, then green, then deep green.
@@ -66,6 +67,7 @@ var (
 		sim.Forest:   {34, 64, 30},
 		sim.Plankton: {42, 122, 128},
 		sim.Fish:     {60, 140, 175},
+		sim.Grazers:  {150, 120, 70},
 	}
 	// lifeViewColors are brighter versions for the Life view.
 	lifeViewColors = [sim.NumSpecies]rgb{
@@ -75,6 +77,7 @@ var (
 		sim.Forest:   {30, 110, 35},
 		sim.Plankton: {60, 175, 175},
 		sim.Fish:     {100, 205, 240},
+		sim.Grazers:  {230, 180, 90},
 	}
 )
 
@@ -133,9 +136,10 @@ func tileColor(t sim.Tile, v viewMode) rgb {
 		return tempColor(t.Temp)
 	case viewWater:
 		c := mix(greyColor, iceColor, t.Ice*1.5)
+		c = mix(c, rgb{200, 210, 235}, t.DryIce)
 		return mix(c, rgb{40, 120, 255}, t.Water*8)
 	case viewLife:
-		c := greyColor
+		c := mix(greyColor, rgb{110, 85, 60}, t.Soil*0.8)
 		if sim.Habitable(t) {
 			c = rgb{110, 100, 50} // could support life
 		}
@@ -150,8 +154,12 @@ func tileColor(t sim.Tile, v viewMode) rgb {
 		return c
 	case viewIndustry:
 		c := mix(greyColor, rgb{120, 120, 125}, (t.Height+1)/2)
+		if t.Volcanic {
+			c = mix(c, rgb{200, 70, 50}, 0.6)
+		}
 		if t.Ore > 0 {
-			c = mix(c, oreColor, 0.5+t.Ore/600)
+			m := mineralColor(t.Mineral)
+			c = mix(c, rgb{float64(m.R), float64(m.G), float64(m.B)}, 0.5+t.Ore/600)
 		}
 		return mix(c, smogColor, t.Pollution*1.5)
 	}
@@ -175,7 +183,10 @@ func surfaceColor(t sim.Tile) rgb {
 	c = mix(c, waterColor, (t.Water-0.05)*4*0.85) // standing water
 	c = mix(c, speciesColors[sim.Plankton], t.Bio[sim.Plankton]*0.45)
 	c = mix(c, speciesColors[sim.Fish], t.Bio[sim.Fish]*0.25)
-	return mix(c, iceColor, t.Ice*2)
+	c = mix(c, speciesColors[sim.Grazers], t.Bio[sim.Grazers]*0.2)
+	ice := mix(iceColor, rgb{150, 112, 88}, t.Dust*0.55)
+	c = mix(c, ice, t.Ice*2)
+	return mix(c, mix(dryIceColor, rgb{150, 112, 88}, t.Dust*0.55), t.DryIce*1.5)
 }
 
 // tempColor maps °C onto a ramp: purple (-80) → blue → white (0) → orange → red (50).
@@ -200,4 +211,15 @@ func tempColor(c float64) rgb {
 		}
 	}
 	return stops[len(stops)-1].col
+}
+
+// mineralColor is how deposits of m show in the Industry view.
+func mineralColor(m sim.Mineral) color.RGBA {
+	switch m {
+	case sim.Fluorite:
+		return color.RGBA{0xB0, 0x7C, 0xE8, 0xFF}
+	case sim.Nitrate:
+		return color.RGBA{0xB8, 0xE0, 0xA0, 0xFF}
+	}
+	return color.RGBA{0xF2, 0xC0, 0x4A, 0xFF}
 }

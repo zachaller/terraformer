@@ -11,7 +11,8 @@ type Goal struct {
 	Progress func(p *Planet) float64
 }
 
-// Goals is the milestone sequence.
+// Goals is the milestone sequence: from landing, through thickening the air
+// and first life, to a living world with air people could breathe.
 var Goals = []Goal{
 	{
 		Name:     "Land",
@@ -20,7 +21,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Dig for ore",
-		Hint: "Tool > Mine: build it on an ore deposit (gold in the Industry view), then Tool > Link it to the lander",
+		Hint: "Build > Industry > Mine: build it on iron ore (gold in the Industry view), then Link it to the lander",
 		Progress: func(p *Planet) float64 {
 			return boolProgress(p.anyRunning(Mine, true, 0.01))
 		},
@@ -38,10 +39,17 @@ var Goals = []Goal{
 		},
 	},
 	{
-		Name: "Liquid water",
-		Hint: "Heaters melt the frozen ground. Basins hold the most ice",
+		Name: "Above the triple point",
+		Hint: "Air this thin can't hold liquid water: warmed ice just turns to vapour. Heat the ground to drive out the CO2 frozen in it, or dust the polar caps (Dust spreader) so their dry ice turns to gas. Reach 0.62 kPa",
 		Progress: func(p *Planet) float64 {
-			return p.Stats().Water / 0.1
+			return (p.Pressure() - startAir.Pressure()) / (TriplePoint - startAir.Pressure())
+		},
+	},
+	{
+		Name: "Liquid water",
+		Hint: "Now heaters melt ice into water. Basins hold the most ice",
+		Progress: func(p *Planet) float64 {
+			return p.Stats().Water / 0.5
 		},
 	},
 	{
@@ -53,16 +61,23 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Spread life",
-		Hint: "Warm more ground: grow microbes on 1% of the planet",
+		Hint: "Warm more ground: grow microbes on 1% of the planet. A Biolab helps life take hold nearby",
 		Progress: func(p *Planet) float64 {
 			return p.Stats().LifeCover / 0.01
 		},
 	},
 	{
-		Name: "Thicken the air",
-		Hint: "Melting ice releases CO2, which warms the whole planet. Reach 2 kPa",
+		Name: "Super greenhouse",
+		Hint: "Mine fluorite (purple in the Industry view) and build a Greenhouse factory: its gases trap thousands of times more heat than CO2. Reach 0.3 Pa",
 		Progress: func(p *Planet) float64 {
-			return (p.Atmosphere - startAtmosphere) / (2 - startAtmosphere)
+			return p.Air.PFC / 0.3
+		},
+	},
+	{
+		Name: "Thicken the air",
+		Hint: "Warmth drives CO2 out of the ground and the caps, which warms the planet further. Reach 5 kPa",
+		Progress: func(p *Planet) float64 {
+			return (p.Pressure() - TriplePoint) / (5 - TriplePoint)
 		},
 	},
 	{
@@ -73,40 +88,106 @@ var Goals = []Goal{
 		},
 	},
 	{
+		Name: "Release the caps",
+		Hint: "Half the polar dry ice still holds its CO2. Dust spreaders and Orbital mirrors on the caps set it free",
+		Progress: func(p *Planet) float64 {
+			return (p.startDryIce - p.Stats().DryIce) / (0.5 * p.startDryIce)
+		},
+	},
+	{
 		Name: "Thaw",
-		Hint: "Keep melting ice. With enough CO2 the planet warms itself. Get the average temperature above 0C",
+		Hint: "Keep warming: CO2, greenhouse factories and mirrors. Get the average temperature above 0C",
 		Progress: func(p *Planet) float64 {
 			return (p.Stats().AvgTemp - p.startAvgTemp) / -p.startAvgTemp
 		},
 	},
 	{
-		Name: "Living world",
-		Hint: "Let microbes flourish: average life across the planet of 50%",
+		Name: "A breath of oxygen",
+		Hint: "Oxygen forms an ozone layer that shields land plants from ultraviolet light. Electrolysers split water (from Ice drills) into it; plankton and moss make it too. Reach 0.6 kPa",
 		Progress: func(p *Planet) float64 {
-			return p.Stats().LifeMean / 0.5
+			return p.Air.O2 / 0.6
 		},
 	},
 	{
-		Name: "Life in the seas",
-		Hint: "Plankton fills warm standing water; fish follow once the air passes 20 kPa. Get fish into 1% of the planet",
+		Name: "Seas",
+		Hint: "Melt enough ice that standing water covers 5% of the planet",
 		Progress: func(p *Planet) float64 {
-			return p.SpeciesCover(Fish) / 0.01
+			return p.Stats().SeaCover / 0.05
+		},
+	},
+	{
+		Name: "Nitrogen",
+		Hint: "Plants need nitrogen. Mine nitrates (pale green in the Industry view) for a Nitrogen plant, or aim a Comet. Reach 3 kPa",
+		Progress: func(p *Planet) float64 {
+			return p.Air.N2 / 3
 		},
 	},
 	{
 		Name: "Grasslands",
-		Hint: "Grass follows moss once it's above 5° and the air passes 8 kPa. Grow grass on 5% of the planet",
+		Hint: "Grass grows from moss once there's soil, nitrogen and an ozone layer. Grow grass on 5% of the planet",
 		Progress: func(p *Planet) float64 {
 			return p.SpeciesCover(Grass) / 0.05
 		},
 	},
 	{
-		Name: "Forests",
-		Hint: "Shrubs grow from grass, then forests from shrubs once the air passes 35 kPa. Grow forest on 2% of the planet",
+		Name: "Shield the air",
+		Hint: "Without a magnetic field the solar wind strips the air away. Build a Magnetic shield and give it full power",
 		Progress: func(p *Planet) float64 {
-			return p.SpeciesCover(Forest) / 0.02
+			return boolProgress(p.MagneticShield())
 		},
 	},
+	{
+		Name: "Life in the seas",
+		Hint: "Plankton fills warm standing water; fish follow once there's 4 kPa of oxygen. Get fish into 1% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Fish) / 0.01
+		},
+	},
+	{
+		Name: "Forests",
+		Hint: "Shrubs grow from grass, then forests from shrubs, as soil deepens and the air thickens. Grow forest on 5% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Forest) / 0.05
+		},
+	},
+	{
+		Name: "Oxygen-rich",
+		Hint: "Plants turn CO2 into oxygen. Spread them, and keep the planet warm with greenhouse gases as CO2 falls. Reach 10 kPa of oxygen",
+		Progress: func(p *Planet) float64 {
+			return p.Air.O2 / 10
+		},
+	},
+	{
+		Name: "Grazers",
+		Hint: "Animals graze the grasslands once there's 10 kPa of oxygen. Get them onto 1% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Grazers) / 0.01
+		},
+	},
+	{
+		Name: "Living world",
+		Hint: "Let life flourish: average microbial life across the planet of 60%",
+		Progress: func(p *Planet) float64 {
+			return p.Stats().LifeMean / 0.6
+		},
+	},
+	{
+		Name: "Breathable air",
+		Hint: "At least 16 kPa of oxygen, at most 1 kPa of CO2 and 25 kPa in all, with the average above 5C. Plants, seas and Carbon scrubbers draw down CO2; greenhouse factories keep it warm",
+		Progress: func(p *Planet) float64 {
+			return min(p.Air.O2/16, (12-p.Air.CO2)/11, p.Pressure()/25, (p.Stats().AvgTemp-p.startAvgTemp)/(5-p.startAvgTemp))
+		},
+	},
+}
+
+// GoalIndex is the position of the goal called name in Goals, or -1.
+func GoalIndex(name string) int {
+	for i, g := range Goals {
+		if g.Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func boolProgress(b bool) float64 {
@@ -158,3 +239,7 @@ func (p *Planet) GoalSummary() string {
 	}
 	return g.Name
 }
+
+// UnlockAll marks every goal done, so every building can be built. It's for
+// demos and screenshots.
+func (p *Planet) UnlockAll() { p.goalsDone = len(Goals) }

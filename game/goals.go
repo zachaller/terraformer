@@ -51,6 +51,11 @@ func (g *Game) goalPlace(name string) (sim.Cell, bool) {
 		score = func(t sim.Tile) float64 { return t.Water }
 	case "First life", "Spread life":
 		score = func(t sim.Tile) float64 { return t.Life }
+	case "First moss", "Grasslands", "Forests", "Life in the seas", "Grazers":
+		s := map[string]sim.Species{"First moss": sim.Moss, "Grasslands": sim.Grass, "Forests": sim.Forest, "Life in the seas": sim.Fish, "Grazers": sim.Grazers}[name]
+		score = func(t sim.Tile) float64 { return t.Bio[s] }
+	case "Seas":
+		score = func(t sim.Tile) float64 { return t.Water }
 	default:
 		return sim.Cell{}, false
 	}
@@ -198,20 +203,18 @@ func (g *Game) alerts() []alert {
 	}
 	if n := p.NetworkOf(p.Buildings()[0]); n.PowerSatisfaction() < 1 {
 		out = append(out, alert{iconBolt, fmt.Sprintf("Colony short of power (%.0f / %.0f)", n.PowerSupply, n.PowerDemand), true, "Add solar", func() {
-			g.setTool(toolSolar)
+			g.setTool(buildTool(sim.SolarPanel))
 			g.showMessage("Tap a tile to place a solar panel, then link it to the colony", msgInfo)
 		}})
 	}
 	if len(empty) > 0 {
-		out = append(out, alert{iconMetal, plural(empty, "A %s ran out of ore", "%d mines ran out of ore"), false, "Find ore", func() {
-			g.view = viewIndustry
-			g.atlasDirty = true
-			g.setTool(toolMine)
-			g.showMessage("Ore deposits are gold in this view. Tap one to place a new mine", msgInfo)
-		}})
+		out = append(out, alert{iconMetal, plural(empty, "A %s has run dry", "%d buildings have run dry"), false, "Show", show(empty[0])})
 	}
 	if len(starved) > 0 {
 		out = append(out, alert{iconWarning, plural(starved, "%s is waiting for ore", "%d buildings are waiting for ore"), false, "Show", show(starved[0])})
+	}
+	if p.Unlocked(sim.MagneticShield) && !p.MagneticShield() {
+		out = append(out, alert{iconAir, fmt.Sprintf("Air escaping to space: %.2f kPa a year", p.EscapePerDay()*365), false, "Air", g.openAir})
 	}
 	if len(full) > 0 {
 		out = append(out, alert{iconWarning, plural(full, "%s has nowhere to send its output", "%d buildings have nowhere to send output"), false, "Show", show(full[0])})

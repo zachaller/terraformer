@@ -17,7 +17,13 @@ type Building struct {
 	// starved) to 1 (full rate).
 	Activity float64
 
+	// Timer counts steps for buildings that wait: a comet's approach.
+	Timer int
+
 	network int // index into Planet.networks
+	// rings caches the tiles around it, nearest first, for its area
+	// effects.
+	rings [][]int
 }
 
 func (b *Building) Spec() *BuildingSpec { return &Specs[b.Type] }
@@ -36,20 +42,23 @@ func (n *Network) PowerSatisfaction() float64 {
 	if n.PowerDemand == 0 {
 		return 1
 	}
-	return math.Min(n.PowerSupply/n.PowerDemand, 1)
+	return min(n.PowerSupply/n.PowerDemand, 1)
 }
 
 // economy is the colony's buildings, links and stores.
 type economy struct {
 	Stores    Amounts
 	Produced  Amounts             // total ever produced, for goals
+	Emitted   Air                 // total gas ever released by machines
 	buildings []*Building         // in construction order
 	at        map[int]*Building   // by tile index
 	links     map[[2]int]struct{} // tile index pairs, lower index first
 	networks  []*Network
 	dirty     bool // networks need recomputing
-	// machineHeat is this step's heating from machines, per tile.
+	// machineHeat is this step's heating from machines, per tile, and
+	// seeded marks tiles near a running biolab.
 	machineHeat []float64
+	seeded      []bool
 }
 
 func newEconomy(cells int) economy {
@@ -57,6 +66,7 @@ func newEconomy(cells int) economy {
 		at:          map[int]*Building{},
 		links:       map[[2]int]struct{}{},
 		machineHeat: make([]float64, cells),
+		seeded:      make([]bool, cells),
 	}
 }
 
@@ -102,7 +112,10 @@ var (
 	ErrNotLanded     = errors.New("Land first: choose a site for the lander")
 	ErrAlreadyLanded = errors.New("The lander has already touched down")
 	ErrOccupied      = errors.New("There's already a building here")
-	ErrNoOre         = errors.New("Mines must go on an ore deposit")
+	ErrNoOre         = errors.New("Mines must go on a mineral deposit")
+	ErrNoIce         = errors.New("Ice drills must go on ice")
+	ErrNotVolcanic   = errors.New("Geothermal plants must go on a volcanic tile")
+	ErrUnique        = errors.New("You can only have one of those")
 	ErrNoBuilding    = errors.New("Links connect two buildings")
 	ErrSameBuilding  = errors.New("Pick a different building to link to")
 	ErrAlreadyLinked = errors.New("Those buildings are already linked")
@@ -131,12 +144,44 @@ func (p *Planet) CanBuild(t BuildingType, c Cell) error {
 		return ErrNotLanded
 	case p.eco.at[idx] != nil:
 		return ErrOccupied
-	case spec.Extracts && p.Tiles[idx].Ore <= 0:
+	case !p.Unlocked(t):
+		return fmt.Errorf("%s unlocks after the goal %q", spec.Name, spec.UnlockedBy)
+	case spec.Site == DepositSite && p.Tiles[idx].Ore <= 0:
 		return ErrNoOre
+	case spec.Site == IceSite && p.Tiles[idx].Ice < 0.05:
+		return ErrNoIce
+	case spec.Site == VolcanicSite && !p.Tiles[idx].Volcanic:
+		return ErrNotVolcanic
+	case spec.Unique && p.count(t) > 0:
+		return ErrUnique
+	case spec.Site == RemoteSite && p.nearestBuilding(idx) < cometClearance:
+		return fmt.Errorf("Aim the comet at least %d tiles from your buildings", cometClearance)
 	case p.eco.Stores[Metal] < spec.Cost:
 		return fmt.Errorf("%s needs %.0f metal; the stores have %.1f", spec.Name, spec.Cost, p.eco.Stores[Metal])
 	}
 	return nil
+}
+
+// count is how many buildings of type t there are.
+func (p *Planet) count(t BuildingType) int {
+	n := 0
+	for _, b := range p.eco.buildings {
+		if b.Type == t {
+			n++
+		}
+	}
+	return n
+}
+
+// nearestBuilding is the distance in tiles from tile idx to the nearest
+// building.
+func (p *Planet) nearestBuilding(idx int) float64 {
+	d := math.Inf(1)
+	c := p.Grid.CellAt(idx)
+	for _, b := range p.eco.buildings {
+		d = min(d, p.LinkLength(c, p.Grid.CellAt(b.Tile)))
+	}
+	return d
 }
 
 // Build places a building of type t on c, paying its cost from the stores.
@@ -167,6 +212,13 @@ func (p *Planet) Demolish(c Cell) error {
 		return ErrLander
 	}
 	p.eco.Stores[Metal] += b.Spec().Cost * demolishRefund
+	p.remove(b)
+	return nil
+}
+
+// remove takes building b and its links off the planet.
+func (p *Planet) remove(b *Building) {
+	idx := b.Tile
 	delete(p.eco.at, idx)
 	p.eco.buildings = slices.DeleteFunc(p.eco.buildings, func(x *Building) bool { return x == b })
 	for l := range p.eco.links {
@@ -175,14 +227,13 @@ func (p *Planet) Demolish(c Cell) error {
 		}
 	}
 	p.eco.dirty = true
-	return nil
 }
 
 // LinkLength is the distance between the centres of tiles a and b, in tile
 // widths.
 func (p *Planet) LinkLength(a, b Cell) float64 {
 	da, db := p.Dir(a), p.Dir(b)
-	angle := math.Acos(math.Min(da.Dot(db), 1))
+	angle := math.Acos(min(da.Dot(db), 1))
 	return angle / p.Grid.TileAngle()
 }
 
@@ -281,62 +332,201 @@ func (p *Planet) updateNetworks() {
 func (p *Planet) stepEconomy() {
 	p.updateNetworks()
 	clear(p.eco.machineHeat)
+	clear(p.eco.seeded)
+	var arrived []*Building
 	for _, n := range p.eco.networks {
 		n.PowerSupply, n.PowerDemand = 0, 0
 		for _, b := range n.Members {
-			n.PowerSupply += b.Spec().PowerOut
+			n.PowerSupply += p.powerOut(b)
 			n.PowerDemand += b.Spec().PowerIn
 		}
 		power := n.PowerSatisfaction()
 		for _, b := range n.Members {
 			p.runBuilding(b, power)
+			if s := b.Spec(); s.Countdown > 0 && b.Timer >= s.Countdown {
+				arrived = append(arrived, b)
+			}
 		}
 		for r := range NumResources {
 			p.distribute(n, Resource(r))
 		}
 	}
+	for _, b := range arrived {
+		p.impact(b)
+	}
+}
+
+// powerOut is the power b makes this step.
+func (p *Planet) powerOut(b *Building) float64 {
+	s := b.Spec()
+	if s.Wind {
+		return s.PowerOut * p.WindFactor()
+	}
+	return s.PowerOut
+}
+
+// Output is what b produces per step at full rate: its recipe's outputs, or
+// for a mine or drill, what it digs.
+func (p *Planet) Output(b *Building) Amounts {
+	s := b.Spec()
+	out := s.Outputs
+	switch s.Site {
+	case DepositSite:
+		out[p.Tiles[b.Tile].Mineral.Resource()] += s.Extracts
+	case IceSite:
+		out[Water] += s.Extracts * iceToWater
+	}
+	return out
+}
+
+// Rings returns the tiles around b, ring by ring out to n (ring 0 is its
+// own tile).
+func (p *Planet) Rings(b *Building, n int) [][]int {
+	if len(b.rings) <= n {
+		b.rings = p.ringsAround(b.Tile, n)
+	}
+	return b.rings[:n+1]
+}
+
+// ringsAround returns the tiles around idx, ring by ring out to n.
+func (p *Planet) ringsAround(idx, n int) [][]int {
+	seen := map[int]bool{idx: true}
+	rings := [][]int{{idx}}
+	for r := 1; r <= n; r++ {
+		var ring []int
+		for _, f := range rings[r-1] {
+			for _, nb := range p.neighbors[f] {
+				if !seen[int(nb)] {
+					seen[int(nb)] = true
+					ring = append(ring, int(nb))
+				}
+			}
+		}
+		rings = append(rings, ring)
+	}
+	return rings
 }
 
 // runBuilding operates b for one step, as fast as power, inputs, output
-// space and (for mines) the ore deposit allow.
+// space and (for mines and drills) what's left to dig allow.
 func (p *Planet) runBuilding(b *Building, power float64) {
 	s := b.Spec()
-	if s.PowerIn == 0 && s.Inputs == (Amounts{}) && s.Outputs == (Amounts{}) && s.Heat == 0 {
-		b.Activity = 1 // passive buildings: lander, solar
-		return
-	}
 	t := &p.Tiles[b.Tile]
-	f := power
+	out := p.Output(b)
+	f := 1.0
+	if s.PowerIn > 0 {
+		f = power
+	}
+	if s.Wind {
+		f = p.WindFactor()
+	}
 	for r := range NumResources {
 		if in := s.Inputs[r]; in > 0 {
-			f = math.Min(f, b.In[r]/in)
+			f = min(f, b.In[r]/in)
 		}
-		if out := s.Outputs[r]; out > 0 {
-			f = math.Min(f, (bufferCap-b.Out[r])/out)
+		if o := out[r]; o > 0 {
+			f = min(f, (bufferCap-b.Out[r])/o)
 		}
 	}
-	if s.Extracts {
-		f = math.Min(f, t.Ore/s.Outputs[Ore])
+	switch s.Site {
+	case DepositSite:
+		f = min(f, t.Ore/s.Extracts)
+	case IceSite:
+		f = min(f, t.Ice/s.Extracts)
 	}
-	f = math.Max(f, 0)
+	if s.Emits.CO2 < 0 {
+		// A scrubber can't take more CO₂ than there is.
+		f = min(f, max(p.Air.CO2-scrubberFloor, 0)/-s.Emits.CO2)
+	}
+	f = max(f, 0)
 	b.Activity = f
+	if s.Countdown > 0 {
+		b.Timer++
+		b.Activity = float64(b.Timer) / float64(s.Countdown)
+		return
+	}
 
 	for r := range NumResources {
 		b.In[r] -= s.Inputs[r] * f
-		b.Out[r] += s.Outputs[r] * f
-		p.eco.Produced[r] += s.Outputs[r] * f
+		b.Out[r] += out[r] * f
+		p.eco.Produced[r] += out[r] * f
 	}
-	if s.Extracts {
-		t.Ore = math.Max(t.Ore-s.Outputs[Ore]*f, 0)
+	switch s.Site {
+	case DepositSite:
+		t.Ore = max(t.Ore-s.Extracts*f, 0)
+	case IceSite:
+		t.Ice = max(t.Ice-s.Extracts*f, 0)
 	}
+	p.Air.CO2 += s.Emits.CO2 * f
+	p.Air.N2 += s.Emits.N2 * f
+	p.Air.O2 += s.Emits.O2 * f
+	p.Air.PFC += s.Emits.PFC * f
+	p.eco.Emitted.CO2 += s.Emits.CO2 * f
+	p.eco.Emitted.N2 += s.Emits.N2 * f
+	p.eco.Emitted.O2 += s.Emits.O2 * f
+	p.eco.Emitted.PFC += s.Emits.PFC * f
 	t.Pollution += s.Pollution * f
 	if s.Heat > 0 {
-		p.eco.machineHeat[b.Tile] += s.Heat * f
-		for _, nb := range p.neighbors[b.Tile] {
-			p.eco.machineHeat[nb] += s.Heat * f / 2
+		for r, ring := range p.Rings(b, s.HeatRings) {
+			h := s.Heat * f * (1 - float64(r)/float64(s.HeatRings+1))
+			for _, idx := range ring {
+				p.eco.machineHeat[idx] += h
+			}
+		}
+	}
+	if s.Dust > 0 {
+		for r, ring := range p.Rings(b, s.DustRings) {
+			d := s.Dust * f * (1 - float64(r)/float64(s.DustRings+1))
+			for _, idx := range ring {
+				if tt := &p.Tiles[idx]; tt.Ice > 0.01 || tt.DryIce > 0.01 {
+					tt.Dust = min(tt.Dust+d, 1)
+				}
+			}
+		}
+	}
+	if s.SeedRings > 0 && f > 0.5 {
+		for _, ring := range p.Rings(b, s.SeedRings) {
+			for _, idx := range ring {
+				p.eco.seeded[idx] = true
+			}
 		}
 	}
 }
+
+// impact strikes the planet with the comet b: it brings water, nitrogen
+// and some CO₂, blasts a crater and heats the area, and destroys any
+// buildings within two rings.
+func (p *Planet) impact(b *Building) {
+	rings := p.ringsAround(b.Tile, 3)
+	for r, ring := range rings {
+		k := 1 - float64(r)/4
+		for _, idx := range ring {
+			t := &p.Tiles[idx]
+			t.Ice += cometIce * k
+			t.Temp += 80 * k
+			t.Height -= 0.12 * k
+			t.Life, t.Bio, t.Soil = 0, [NumSpecies]float64{}, t.Soil*(1-k)
+			if r <= 2 {
+				if other := p.eco.at[idx]; other != nil && other != b && other.Type != Lander {
+					p.remove(other)
+				}
+			}
+		}
+	}
+	p.Air.N2 += cometN2
+	p.Air.CO2 += cometCO2
+	p.Vapour += cometVapour
+	p.impacts++
+	p.remove(b)
+}
+
+// What a comet brings.
+const (
+	cometIce    = 2.0 // per tile at the centre, less further out
+	cometN2     = 1.5 // kPa
+	cometCO2    = 1.0 // kPa
+	cometVapour = 40  // water depth, into the air
+)
 
 // distribute moves resource r from producers' output buffers to consumers'
 // input buffers, in tile order. With a depot in the network, all output goes
@@ -354,7 +544,7 @@ func (p *Planet) distribute(n *Network, r Resource) {
 			b.Out[r] = 0
 		}
 		for _, b := range n.Members {
-			give := math.Min(need(b), p.eco.Stores[r])
+			give := min(need(b), p.eco.Stores[r])
 			b.In[r] += give
 			p.eco.Stores[r] -= give
 		}
@@ -366,9 +556,13 @@ func (p *Planet) distribute(n *Network, r Resource) {
 			if want <= 0 {
 				break
 			}
-			give := math.Min(want, producer.Out[r])
+			give := min(want, producer.Out[r])
 			producer.Out[r] -= give
 			consumer.In[r] += give
 		}
 	}
 }
+
+// AddMetal puts metal straight into the colony's stores. It's for demos and
+// screenshots.
+func (p *Planet) AddMetal(m float64) { p.eco.Stores[Metal] += m }

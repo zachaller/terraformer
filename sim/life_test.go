@@ -3,20 +3,21 @@ package sim
 import "testing"
 
 // lushPlanet returns a small planet with warm, damp, clean land everywhere,
-// established microbes, and the given atmosphere.
+// established microbes, developed soil, and the given atmosphere (half CO₂,
+// 30% nitrogen, 20% oxygen).
 func lushPlanet(air float64) *Planet {
 	p := NewPlanet(6, 1) // about as many tiles around as a cube-sphere of 8
-	p.Atmosphere = air
+	p.Air = Air{CO2: air * 0.5, N2: air * 0.3, O2: air * 0.2}
 	for i := range p.Tiles {
 		t := &p.Tiles[i]
-		t.Temp, t.Water, t.Ice, t.Life, t.Pollution = 20, 0.1, 0, 1, 0
+		t.Temp, t.Water, t.Ice, t.Life, t.Pollution, t.Soil = 20, 0.1, 0, 1, 0, 1
 	}
 	return p
 }
 
 func TestSuccessionOnLand(t *testing.T) {
 	p := lushPlanet(100)
-	for range 7000 {
+	for range 16000 {
 		p.stepSpecies()
 		p.Ticks++
 	}
@@ -32,7 +33,7 @@ func TestSuccessionOnLand(t *testing.T) {
 
 func TestSuccessionNeedsAir(t *testing.T) {
 	p := lushPlanet(5) // enough for moss, not grass
-	for range 4000 {
+	for range 9000 {
 		p.stepSpecies()
 		p.Ticks++
 	}
@@ -63,7 +64,7 @@ func TestSeaLife(t *testing.T) {
 	for i := range p.Tiles {
 		p.Tiles[i].Water = 1
 	}
-	for range 4000 {
+	for range 7000 {
 		p.stepSpecies()
 		p.Ticks++
 	}

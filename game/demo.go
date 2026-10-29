@@ -7,9 +7,11 @@ import (
 	"github.com/zachaller/terraformer/sim"
 )
 
-// placeDemoHeaters puts fixed warmth on a ring of tiles around the equator:
-// enough to tip the planet into runaway warming.
+// placeDemoHeaters puts fixed warmth on a ring of tiles around the equator,
+// and a little super-greenhouse gas in the air: enough to tip the planet
+// into runaway warming.
 func placeDemoHeaters(p *sim.Planet) {
+	p.Air.PFC = 0.5
 	for idx := range p.Tiles {
 		c := p.Grid.CellAt(idx)
 		if d := p.Dir(c); math.Abs(d.Y) < 0.05 && idx%3 == 0 {
@@ -21,7 +23,8 @@ func placeDemoHeaters(p *sim.Planet) {
 // placeDemoColony lands near the ore deposit closest to direction front and
 // builds a small working colony: a mine, a smelter, a solar panel and a
 // heater, all linked to the lander. Used to preview the economy.
-func placeDemoColony(p *sim.Planet, front sim.Vec3) {
+// With showcase set, it also builds one of every other building.
+func placeDemoColony(p *sim.Planet, front sim.Vec3, showcase bool) {
 	g := p.Grid
 	byDistance := func(from sim.Vec3) []sim.Cell {
 		cells := make([]sim.Cell, g.NumCells())
@@ -70,4 +73,24 @@ func placeDemoColony(p *sim.Planet, front sim.Vec3) {
 	build(sim.Smelter, free())
 	build(sim.SolarPanel, free())
 	build(sim.HeaterMachine, free())
+	if !showcase {
+		return
+	}
+	// One of everything else, on tiles made suitable for it.
+	p.UnlockAll()
+	p.AddMetal(5000)
+	for bt := sim.IceDrill; bt < sim.NumBuildingTypes; bt++ {
+		c := free()
+		if bt == sim.Comet {
+			continue
+		}
+		t := &p.Tiles[g.Index(c)]
+		switch sim.Specs[bt].Site {
+		case sim.IceSite:
+			t.Ice = 1
+		case sim.VolcanicSite:
+			t.Volcanic = true
+		}
+		build(bt, c)
+	}
 }

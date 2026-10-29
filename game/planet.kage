@@ -17,8 +17,14 @@ var Selected vec3 // selected cell (face, i, j); face < 0 means none
 var Time float    // seconds
 var Light vec3    // unit light direction, view space
 
-// faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1].
+// faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1], on
+// the equal-angle grid.
 func faceUV(d vec3) vec3 {
+	f := cubeFaceUV(d)
+	return vec3(f.x, atan(f.yz)*4/3.14159265)
+}
+
+func cubeFaceUV(d vec3) vec3 {
 	a := abs(d)
 	if a.x >= a.y && a.x >= a.z {
 		if d.x > 0 {
@@ -36,6 +42,50 @@ func faceUV(d vec3) vec3 {
 		return vec3(4, d.x/a.z, d.y/a.z)
 	}
 	return vec3(5, -d.x/a.z, d.y/a.z)
+}
+
+// dirFromFaceUV mirrors sim.dirFromFaceUV: the cube point for (face, u, v)
+// on the equal-angle grid.
+func dirFromFaceUV(face float, u float, v float) vec3 {
+	return cubeDir(face, tan(u*3.14159265/4), tan(v*3.14159265/4))
+}
+
+func cubeDir(face float, u float, v float) vec3 {
+	if face == 0 {
+		return vec3(1, v, -u)
+	}
+	if face == 1 {
+		return vec3(-1, v, u)
+	}
+	if face == 2 {
+		return vec3(u, 1, -v)
+	}
+	if face == 3 {
+		return vec3(u, -1, v)
+	}
+	if face == 4 {
+		return vec3(u, v, 1)
+	}
+	return vec3(-u, v, -1)
+}
+
+// tileLocal returns where planet-space direction d falls relative to the
+// centre of tile ij on face, measured on the plane touching the sphere at the
+// tile centre, oriented north-up, in units of the tile's width. Unlike the
+// face's own (u, v) grid it isn't skewed near cube corners, so building
+// symbols drawn in it keep their shape.
+func tileLocal(d vec3, face float, ij vec2) vec2 {
+	uv := (ij+0.5)/N*2 - 1
+	c := normalize(dirFromFaceUV(face, uv.x, uv.y))
+	size := length(normalize(dirFromFaceUV(face, uv.x+2/N, uv.y)) - c)
+	up := vec3(0, 1, 0)
+	if abs(c.y) > 0.99 {
+		up = vec3(0, 0, 1)
+	}
+	east := normalize(cross(up, c))
+	north := cross(c, east)
+	off := d/dot(d, c) - c
+	return vec2(dot(off, east), dot(off, north)) / size
 }
 
 // building returns the colour (rgb) and coverage (a) of building type bt at
@@ -121,7 +171,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	bdata := imageSrc0UnsafeAt(texel + vec2(0, N))
 	bt := floor(bdata.r*255 + 0.5)
 	if bt > 0 {
-		b := building(bt, g-0.5)
+		b := building(bt, tileLocal(d, f.x, ij))
 		// Idle buildings (unpowered, starved or full) pulse red.
 		if bdata.g < 0.05 {
 			b.rgb = mix(b.rgb, vec3(0.8, 0.1, 0.1), 0.35+0.35*sin(Time*5))

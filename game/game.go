@@ -386,9 +386,20 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	g.hud.Clear()
 	ebitenutil.DebugPrint(g.hud, msg)
 	s := ebiten.Monitor().DeviceScaleFactor()
+	l, t, _, _ := currentSafeArea()
+
+	// A translucent panel behind the text keeps it readable over bright
+	// terrain like ice caps. The debug font is 6×16 pixels per character.
+	lines := strings.Split(msg, "\n")
+	widest := 0
+	for _, line := range lines {
+		widest = max(widest, len(line))
+	}
+	pw, ph := float64(6*widest+12)*s, float64(16*len(lines)+8)*s
+	vector.FillRect(screen, float32(l+2*s), float32(t+4*s), float32(pw), float32(ph), color.RGBA{0, 0, 0, 150}, false)
+
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(s, s)
-	l, t, _, _ := currentSafeArea()
 	op.GeoM.Translate(l+8*s, t+8*s)
 	screen.DrawImage(g.hud, op)
 }

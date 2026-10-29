@@ -16,7 +16,12 @@ import "math"
 //	face 4 (+Z): u =  x, v =  y
 //	face 5 (-Z): u = -x, v =  y
 //
-// game/planet.kage repeats this mapping; keep the two in sync.
+// The (u, v) grid is equal-angle rather than evenly spaced on the flat cube
+// face (u = 4/π·atan(u_cube)), so tiles near cube corners aren't much smaller
+// than those at face centres.
+//
+// game/planet.kage repeats this mapping (faceUV and dirFromFaceUV); keep
+// them in sync.
 
 // Faces is the number of cube faces.
 const Faces = 6
@@ -96,6 +101,17 @@ func (g Grid) coord(t float64) int {
 }
 
 func faceUV(d Vec3) (face int, u, v float64) {
+	face, u, v = cubeFaceUV(d)
+	return face, math.Atan(u) * 4 / math.Pi, math.Atan(v) * 4 / math.Pi
+}
+
+func dirFromFaceUV(face int, u, v float64) Vec3 {
+	return cubeDir(face, math.Tan(u*math.Pi/4), math.Tan(v*math.Pi/4))
+}
+
+// cubeFaceUV projects d onto the cube: its face and position (u, v) on it,
+// each in [-1, 1].
+func cubeFaceUV(d Vec3) (face int, u, v float64) {
 	ax, ay, az := math.Abs(d.X), math.Abs(d.Y), math.Abs(d.Z)
 	switch {
 	case ax >= ay && ax >= az:
@@ -116,7 +132,8 @@ func faceUV(d Vec3) (face int, u, v float64) {
 	}
 }
 
-func dirFromFaceUV(face int, u, v float64) Vec3 {
+// cubeDir is the inverse of cubeFaceUV: the point on the cube for (face, u, v).
+func cubeDir(face int, u, v float64) Vec3 {
 	switch face {
 	case 0:
 		return Vec3{1, v, -u}

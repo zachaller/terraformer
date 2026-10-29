@@ -63,7 +63,7 @@ var (
 // tiles plus a one-tile border copied from the neighbouring faces, so the
 // shader can blend colours smoothly across face seams. The top half holds
 // tile colours; the bottom half holds building data (red: building type + 1,
-// or 0 for none; green: activity).
+// or 0 for none; green: activity; blue: sim.StatusKind).
 
 // atlasSources maps each pixel in the top half of the atlas to the tile whose
 // colour it shows.
@@ -107,6 +107,7 @@ func fillAtlas(pix []byte, src []int32, p *sim.Planet, v viewMode) {
 		off := half + ((c.J+1)*stride+c.Face*(n+2)+c.I+1)*4
 		pix[off] = uint8(b.Type) + 1
 		pix[off+1] = uint8(b.Activity * 255)
+		pix[off+2] = uint8(p.Diagnose(b).Kind)
 	}
 }
 

@@ -126,6 +126,17 @@ func (g *Game) runUI(u *ui) {
 	}
 	planetTop := y + gap
 	planetBottom := bottom
+	planetLeft, planetRight := sl, W-sr
+	sheetRight := math.Min(W-sr, sl+520)
+	// On wide screens, sheets sit at the left with the planet beside them.
+	sideBySide := W-sr-sheetRight > 320
+	beside := func(sheetTop float64) {
+		if sideBySide {
+			planetLeft, planetTop, planetBottom = sheetRight, st+10, bottom
+		} else {
+			planetBottom = sheetTop - gap
+		}
+	}
 
 	switch {
 	case !g.planet.Landed():
@@ -136,9 +147,9 @@ func (g *Game) runUI(u *ui) {
 		planetBottom = bottom - h - gap
 		g.toast(u, left, narrow, planetBottom)
 	case g.goalsOpen:
-		planetBottom = g.goalsSheet(u, sl, math.Min(W-sr, sl+520), H) - gap
+		beside(g.goalsSheet(u, sl, sheetRight, H))
 	case g.inspectOpen():
-		planetBottom = g.inspectSheet(u, sl, math.Min(W-sr, sl+520), H) - gap
+		beside(g.inspectSheet(u, sl, sheetRight, H))
 	case placing && g.pending != nil:
 		planetBottom = g.placementPanel(u, left, narrow, bottom) - gap
 		g.toast(u, left, narrow, planetBottom)
@@ -164,7 +175,7 @@ func (g *Game) runUI(u *ui) {
 	}
 	g.linkBubble(u, left, right)
 	if !u.measuring {
-		g.planetTarget = [4]float64{sl * s, planetTop * s, (W - sl - sr) * s, math.Max(planetBottom-planetTop, 80) * s}
+		g.planetTarget = [4]float64{planetLeft * s, planetTop * s, (planetRight - planetLeft) * s, math.Max(planetBottom-planetTop, 80) * s}
 	}
 }
 
@@ -543,50 +554,79 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 	return y
 }
 
-// buildingGlyph draws a small picture of building type bt in a size×size box.
+// buildingGlyph draws a small picture of building type bt in a size×size box,
+// matching the designs the planet shader draws.
 func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
+	if !u.drawing() {
+		return
+	}
 	k := size / 24
 	cx, cy := x+size/2, y+size/2
+	s := u.s
+	pt := func(px, py float64) (float32, float32) { return f32((cx + px*k) * s), f32((cy + py*k) * s) }
 	ring := func(r, width float64, c color.Color) {
-		if u.drawing() {
-			vector.StrokeCircle(u.dst, f32(cx*u.s), f32(cy*u.s), f32(r*k*u.s), f32(width*k*u.s), c, true)
-		}
+		vector.StrokeCircle(u.dst, f32(cx*s), f32(cy*s), f32(r*k*s), f32(width*k*s), c, true)
+	}
+	line := func(x0, y0, x1, y1, width float64, c color.Color) {
+		ax, ay := pt(x0, y0)
+		bx, by := pt(x1, y1)
+		vector.StrokeLine(u.dst, ax, ay, bx, by, f32(width*k*s), c, true)
+	}
+	fillPath := func(p *vector.Path, c color.Color) {
+		op := &vector.DrawPathOptions{AntiAlias: true}
+		op.ColorScale.ScaleWithColor(c)
+		vector.FillPath(u.dst, p, nil, op)
 	}
 	switch bt {
 	case sim.Lander:
-		u.circle(cx, cy, 10*k, colText)
-		ring(10, 3, rgba(0x5AD1F5))
-		u.circle(cx, cy, 4*k, rgba(0x5AD1F5))
+		line(-7, 4, -11, 7, 1.4, rgba(0x8A96AA))
+		line(7, 4, 11, 7, 1.4, rgba(0x8A96AA))
+		line(0, -7, 0, -11, 1.4, rgba(0x8A96AA))
+		var hex vector.Path
+		for i := range 6 {
+			a := math.Pi/6 + float64(i)*math.Pi/3
+			px, py := pt(8.5*math.Cos(a), 8.5*math.Sin(a))
+			if i == 0 {
+				hex.MoveTo(px, py)
+			} else {
+				hex.LineTo(px, py)
+			}
+		}
+		hex.Close()
+		fillPath(&hex, rgba(0x3A4658))
+		u.circle(cx, cy, 5*k, colText)
+		ring(4.3, 1.6, rgba(0x5AD1F5))
+		u.circle(cx, cy, 1.8*k, rgba(0x5AD1F5))
 	case sim.SolarPanel:
 		for i := range 2 {
 			for j := range 2 {
-				u.fillRound(x+(2+float64(i)*10.5)*k, y+(3+float64(j)*9.5)*k, 9.5*k, 8.5*k, 1, rgba(0x1E3A78))
-				u.strokeRound(x+(2+float64(i)*10.5)*k, y+(3+float64(j)*9.5)*k, 9.5*k, 8.5*k, 1, 1, colBlue)
+				px, py := x+(2+float64(i)*10.5)*k, y+(3+float64(j)*9.5)*k
+				u.fillRound(px, py, 9.5*k, 8.5*k, 1, rgba(0x1E3A78))
+				u.strokeRound(px, py, 9.5*k, 8.5*k, 1, 1, colBlue)
 			}
 		}
 	case sim.Mine:
-		if u.drawing() {
-			var p vector.Path
-			p.MoveTo(f32(cx*u.s), f32((cy-11*k)*u.s))
-			p.LineTo(f32((cx+11*k)*u.s), f32(cy*u.s))
-			p.LineTo(f32(cx*u.s), f32((cy+11*k)*u.s))
-			p.LineTo(f32((cx-11*k)*u.s), f32(cy*u.s))
-			p.Close()
-			op := &vector.DrawPathOptions{AntiAlias: true}
-			op.ColorScale.ScaleWithColor(rgba(0x8A8A94))
-			vector.FillPath(u.dst, &p, nil, op)
-		}
+		u.circle(cx, cy, 10*k, rgba(0x6E5446))
+		u.circle(cx, cy, 7*k, rgba(0x4A372D))
 		u.circle(cx, cy, 4*k, rgba(0x2A1E18))
-		u.circle(cx-5*k, cy-1*k, 1.3*k, rgba(0xF2C04A))
-		u.circle(cx+4*k, cy+4*k, 1.3*k, rgba(0xF2C04A))
+		u.circle(cx-5*k, cy+3*k, 1*k, rgba(0xF2C04A))
+		u.circle(cx+6*k, cy-1*k, 0.9*k, rgba(0xF2C04A))
+		line(-3.5, -5, 0, -11, 1.2, colIcon)
+		line(3.5, -5, 0, -11, 1.2, colIcon)
+		line(0, -11, 0, -1, 1, colIcon)
 	case sim.Smelter:
-		u.fillRound(x+3*k, y+9*k, 18*k, 13*k, 2, rgba(0xC46A2A))
-		u.fillRound(x+14*k, y+3*k, 4*k, 9*k, 1, rgba(0x2A2A30))
-		u.fillRound(x+5.5*k, y+14*k, 7*k, 5*k, 1, rgba(0xFFD36B))
+		u.fillRound(x+2.5*k, y+9*k, 19*k, 13*k, 2, rgba(0xC46A2A))
+		u.fillRound(x+2.5*k, y+9*k, 19*k, 3.5*k, 1, rgba(0x8E4A1C))
+		u.fillRound(x+15*k, y+3*k, 4*k, 9*k, 1, rgba(0x2A2A30))
+		u.fillRound(x+5*k, y+15*k, 7.5*k, 4.5*k, 1, rgba(0xFFD36B))
 	case sim.HeaterMachine:
-		u.circle(cx, cy, 11.5*k, withAlpha(colAmber, 70))
-		ring(6.5, 3, rgba(0xE2553A))
-		u.circle(cx, cy, 3.2*k, rgba(0xFFD36B))
+		u.circle(cx, cy, 11.5*k, withAlpha(colAmber, 60))
+		for i := range 8 {
+			a := float64(i) * math.Pi / 4
+			line(7*math.Cos(a), 7*math.Sin(a), 10.3*math.Cos(a), 10.3*math.Sin(a), 1.6, rgba(0xB83A26))
+		}
+		ring(5.8, 2.6, rgba(0xE2553A))
+		u.circle(cx, cy, 2.9*k, rgba(0xFFD36B))
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 
 const (
 	minZoom = 0.5
-	maxZoom = 4
+	maxZoom = 10
 	// spinDecay is how much rotation momentum survives each tick after release.
 	spinDecay = 0.92
 )

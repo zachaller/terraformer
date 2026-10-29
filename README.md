@@ -74,7 +74,7 @@ shape a barren planet until life takes hold. See
 |---|---|---|---|
 | Lander | free, placed first | | Holds the colony stores; makes 3 power |
 | Solar | 4 | | Makes 2 power |
-| Pylon | 3 | | A hub: connects every building within 4 tiles, and other pylons (and the lander) within 10 |
+| Pylon | 3 | | A hub: connects buildings within 4 tiles (load capacity 8), and other pylons and the lander within 12 |
 | Wind turbine | 10 | Thicken the air | Up to 6 power, from 2 kPa, full at 40 kPa |
 | Geothermal | 18 | First life | 10 power on a volcanic tile; warms it |
 | Mine | 6 | | Digs a deposit: iron ore, fluorite or nitrate; 1 power; pollutes |
@@ -91,10 +91,13 @@ shape a barren planet until life takes hold. See
 | Biolab | 30 | First life | Life takes hold far faster up to 3 tiles around; 3 power |
 | Comet | 120 | Thaw | Strikes 30 days after it's aimed: water, nitrogen and CO₂, a crater, and destruction 2 tiles around; one at a time |
 
-Buildings join networks through hubs: the lander and pylons each connect
-every building within 4 tiles, and hubs within 10 tiles of each other
-connect, so a chain of pylons carries the colony's network across the
-planet. There are no manual links. A network shares its power (short of
+Buildings join networks through hubs: the lander and pylons connect
+buildings within 4 tiles, and hubs within 12 tiles of each other connect,
+so a chain of pylons carries the colony's network across the planet. Each
+hub has a load capacity (pylons 8, the lander 12), and each building it
+connects takes load by its distance (1 next door, up to 4 at the edge), the
+nearest first: dense or spread-out colonies need more pylons, and a
+building no hub has room for stays unconnected. There are no manual links. A network shares its power (short of
 power, everything in it slows down and its lines turn orange) and moves
 resources between buildings. Networks that include the lander send surplus
 into the colony stores, which pay for construction, and feed machines from

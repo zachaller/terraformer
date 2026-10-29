@@ -50,14 +50,23 @@ func (g *Game) confirmPlacement() {
 	}
 }
 
+// isHubType reports whether buildings of type t are network hubs.
+func isHubType(t sim.BuildingType) bool { return sim.Specs[t].Reach > 0 }
+
 // connectionRow describes how a building placed on c would join a network,
 // for the placement preview.
 func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) previewRow {
 	p := g.planet
-	via, ok, colony := p.Connection(bt, c)
+	via, ok, colony, full := p.Connection(bt, c)
 	switch {
+	case full:
+		return previewRow{iconLink, colAmber, "Not connected", "nearby pylons are full", colAmber}
+	case ok && colony && !isHubType(bt):
+		hub := p.BuildingAt(via)
+		load, capacity := p.HubLoad(hub)
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", fmt.Sprintf("via %s · load %.0f/%.0f", lower(hub.Spec().Name), load+math.Max(p.Distance(c, via), 1), capacity), colTeal}
 	case ok && colony:
-		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "via the " + lower(p.BuildingAt(via).Spec().Name), colTeal}
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to the colony", colTeal}
 	case ok:
 		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "not to the colony", colAmber}
 	}
@@ -267,7 +276,7 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 	case sim.Biolab:
 		rows = append(rows, previewRow{iconLeaf, colTeal, "Seeds life", fmt.Sprintf("up to %d tiles around", spec.SeedRings), colText})
 	case sim.Pylon:
-		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Connects", fmt.Sprintf("everything within %.0f tiles", spec.CoverRadius), colText})
+		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Carries", fmt.Sprintf("load %.0f within %.0f tiles", spec.Capacity, spec.CoverRadius), colText})
 		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Joins", fmt.Sprintf("pylons and the lander within %.0f tiles", spec.Reach), colText})
 	case sim.CarbonScrubber:
 		rows = append(rows, previewRow{iconAir, colCO2, "Removes", fmt.Sprintf("%.2f kPa a year of CO2", -spec.Emits.CO2*3650), colText})

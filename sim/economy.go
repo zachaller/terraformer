@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
@@ -54,8 +55,12 @@ type economy struct {
 	at        map[int]*Building // by tile index
 	// hubLinks and spokes are the connections hubs make (see HubLinks).
 	hubLinks, spokes [][2]int
-	networks         []*Network
-	dirty            bool // networks need recomputing
+	// hubLoad is the load each hub (by tile) carries, and full marks
+	// buildings in reach of hubs that have no room for them.
+	hubLoad  map[int]float64
+	full     map[int]bool
+	networks []*Network
+	dirty    bool // networks need recomputing
 	// machineHeat is this step's heating from machines, per tile, and
 	// seeded marks tiles near a running biolab.
 	machineHeat []float64
@@ -214,13 +219,20 @@ func (p *Planet) Distance(a, b Cell) float64 {
 }
 
 // Buildings join networks without links: hubs (the lander and pylons)
-// connect every building within their CoverRadius, and each other within
-// their Reach.
+// connect buildings within their CoverRadius, and each other within their
+// Reach. Each building a hub connects adds to its load, by how far away it
+// is (see connectionLoad), up to the hub's Capacity, so dense colonies
+// need more pylons.
 
 // isHub reports whether buildings of type t are network hubs.
 func isHub(t BuildingType) bool { return Specs[t].Reach > 0 }
 
-// joins reports whether hub h connects a building of type t on tile idx.
+// connectionLoad is how much of a hub's capacity connecting a building d
+// tiles away takes.
+func connectionLoad(d float64) float64 { return max(d, 1) }
+
+// joins reports whether hub h reaches a building of type t on tile idx (a
+// hub, or any building within its cover, capacity aside).
 func (p *Planet) joins(h *Building, t BuildingType, idx int) bool {
 	if h.Tile == idx {
 		return false
@@ -238,10 +250,21 @@ func (p *Planet) joins(h *Building, t BuildingType, idx int) bool {
 func (p *Planet) HubLinks() [][2]int { p.updateNetworks(); return p.eco.hubLinks }
 func (p *Planet) Spokes() [][2]int   { p.updateNetworks(); return p.eco.spokes }
 
+// HubLoad returns the load hub b carries and its capacity.
+func (p *Planet) HubLoad(b *Building) (load, capacity float64) {
+	p.updateNetworks()
+	return p.eco.hubLoad[b.Tile], b.Spec().Capacity
+}
+
+// HubsFull reports whether b is in reach of hubs that are all too loaded
+// to connect it.
+func (p *Planet) HubsFull(b *Building) bool { p.updateNetworks(); return p.eco.full[b.Tile] }
+
 // Connection is how a building of type t placed on c would join a network:
-// via is the nearest hub that would connect it, and colony whether that
-// hub's network includes the lander. ok is false when nothing would.
-func (p *Planet) Connection(t BuildingType, c Cell) (via Cell, ok, colony bool) {
+// via is the hub that would connect it, and colony whether that hub's
+// network includes the lander. ok is false when nothing would; full then
+// says whether that's because the hubs in reach have no room.
+func (p *Planet) Connection(t BuildingType, c Cell) (via Cell, ok, colony, full bool) {
 	p.updateNetworks()
 	idx := p.Grid.Index(c)
 	best, bestScore := -1, math.Inf(1)
@@ -249,7 +272,12 @@ func (p *Planet) Connection(t BuildingType, c Cell) (via Cell, ok, colony bool) 
 		if !isHub(h.Type) || !p.joins(h, t, idx) {
 			continue
 		}
-		score := p.Distance(c, p.Grid.CellAt(h.Tile))
+		d := p.Distance(c, p.Grid.CellAt(h.Tile))
+		if !isHub(t) && p.eco.hubLoad[h.Tile]+connectionLoad(d) > h.Spec().Capacity+1e-9 {
+			full = true
+			continue
+		}
+		score := d
 		if !p.eco.networks[h.network].HasDepot {
 			score += 1000 // prefer the colony
 		}
@@ -258,9 +286,9 @@ func (p *Planet) Connection(t BuildingType, c Cell) (via Cell, ok, colony bool) 
 		}
 	}
 	if best < 0 {
-		return Cell{}, false, false
+		return Cell{}, false, false, full
 	}
-	return p.Grid.CellAt(best), true, p.eco.networks[p.eco.at[best].network].HasDepot
+	return p.Grid.CellAt(best), true, p.eco.networks[p.eco.at[best].network].HasDepot, false
 }
 
 // updateNetworks regroups buildings into networks after buildings change,
@@ -290,6 +318,13 @@ func (p *Planet) updateNetworks() {
 		}
 	}
 	e.hubLinks, e.spokes = e.hubLinks[:0], e.spokes[:0]
+	e.hubLoad, e.full = map[int]float64{}, map[int]bool{}
+	// Hubs connect each other freely.
+	type pair struct {
+		d       float64
+		hub, to *Building
+	}
+	var pairs []pair
 	for _, h := range e.buildings {
 		if !isHub(h.Type) {
 			continue
@@ -301,12 +336,39 @@ func (p *Planet) updateNetworks() {
 			if isHub(b.Type) {
 				if h.Tile < b.Tile {
 					e.hubLinks = append(e.hubLinks, [2]int{h.Tile, b.Tile})
+					union(h.Tile, b.Tile)
 				}
-			} else {
-				e.spokes = append(e.spokes, [2]int{h.Tile, b.Tile})
+				continue
 			}
-			union(h.Tile, b.Tile)
+			pairs = append(pairs, pair{p.Distance(p.Grid.CellAt(h.Tile), p.Grid.CellAt(b.Tile)), h, b})
 		}
+	}
+	// Other buildings: the shortest connections first, each building to
+	// one hub, while the hub has room.
+	slices.SortFunc(pairs, func(a, b pair) int {
+		switch {
+		case a.d != b.d:
+			return cmp.Compare(a.d, b.d)
+		case a.to.Tile != b.to.Tile:
+			return a.to.Tile - b.to.Tile
+		}
+		return a.hub.Tile - b.hub.Tile
+	})
+	connected := map[int]bool{}
+	for _, pr := range pairs {
+		if connected[pr.to.Tile] {
+			continue
+		}
+		load := connectionLoad(pr.d)
+		if e.hubLoad[pr.hub.Tile]+load > pr.hub.Spec().Capacity+1e-9 {
+			e.full[pr.to.Tile] = true
+			continue
+		}
+		e.hubLoad[pr.hub.Tile] += load
+		connected[pr.to.Tile] = true
+		delete(e.full, pr.to.Tile)
+		e.spokes = append(e.spokes, [2]int{pr.hub.Tile, pr.to.Tile})
+		union(pr.hub.Tile, pr.to.Tile)
 	}
 
 	sorted := slices.Clone(e.buildings)

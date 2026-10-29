@@ -166,6 +166,9 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 		}
 	case sim.StatusNoPower:
 		msg = "No power: nothing connects it. Build a Pylon within 4 tiles of it, close enough to the colony's other hubs."
+		if p.HubsFull(b) {
+			msg = "No power: the pylons near it are full. Each building takes load by its distance from the pylon, so add another pylon closer to it."
+		}
 		fix, action = pylonFix, addPylon
 	case sim.StatusNoInput:
 		msg = fmt.Sprintf("Waiting for %s. Connect it to the colony, whose stores supply it: within 4 tiles of the lander or a connected pylon.", lower(st.Resource.String()))
@@ -303,9 +306,11 @@ func runningMessage(p *sim.Planet, b *sim.Building) string {
 	spec := b.Spec()
 	switch b.Type {
 	case sim.Lander:
-		return fmt.Sprintf("Makes %.0f power and holds the colony's stores. Connects every building within %.0f tiles, and pylons within %.0f.", spec.PowerOut, spec.CoverRadius, spec.Reach)
+		load, capacity := p.HubLoad(b)
+		return fmt.Sprintf("Makes %.0f power and holds the colony's stores. Connects buildings within %.0f tiles (load %.0f of %.0f) and pylons within %.0f.", spec.PowerOut, spec.CoverRadius, load, capacity, spec.Reach)
 	case sim.Pylon:
-		return fmt.Sprintf("Connects every building within %.0f tiles to its network, and joins pylons and the lander within %.0f tiles.", spec.CoverRadius, spec.Reach)
+		load, capacity := p.HubLoad(b)
+		return fmt.Sprintf("Load %.0f of %.0f. Connects buildings within %.0f tiles (each takes load by its distance: 1 next door, 4 at the edge), and joins pylons and the lander within %.0f tiles.", load, capacity, spec.CoverRadius, spec.Reach)
 	case sim.SolarPanel, sim.Geothermal:
 		return fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
 	case sim.WindTurbine:

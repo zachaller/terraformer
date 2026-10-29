@@ -59,7 +59,7 @@ var speeds = []struct {
 // buildInfo is the build menu's description of each building.
 var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.SolarPanel:        {"Makes 2 power", "Clean"},
-	sim.Pylon:             {"Connects all within 4 tiles; joins hubs within 10", "No power needed"},
+	sim.Pylon:             {"Connects nearby buildings; joins hubs within 12", "Load 8 · no power"},
 	sim.WindTurbine:       {"Up to 6 power once the air is thick", "Clean"},
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},

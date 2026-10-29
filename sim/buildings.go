@@ -140,7 +140,8 @@ type BuildingSpec struct {
 
 	// Hubs (the lander and pylons) join networks: they connect every
 	// building within CoverRadius tiles, and other hubs within Reach tiles.
-	Reach, CoverRadius float64
+	// Capacity is how much load (see connectionLoad) a hub can carry.
+	Reach, CoverRadius, Capacity float64
 
 	// Depot buildings connect a network to the colony stores: surplus
 	// output goes into the stores, and consumers can draw from them.
@@ -154,6 +155,7 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		PowerOut:    3,
 		Reach:       hubReach,
 		CoverRadius: hubCover,
+		Capacity:    12,
 		// A trickle of metal from salvage and recycling, so a colony that's
 		// spent everything can always build another mine eventually.
 		Outputs: Amounts{Metal: 0.004},
@@ -171,6 +173,7 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Cost:        3,
 		Reach:       hubReach,
 		CoverRadius: hubCover,
+		Capacity:    8,
 	},
 	WindTurbine: {
 		Name:       "Wind turbine",
@@ -317,7 +320,7 @@ const (
 	// hubCover is how far, in tiles, hubs connect buildings around them,
 	// and hubReach how far apart hubs can be and still connect.
 	hubCover = 4
-	hubReach = 10
+	hubReach = 12
 	// demolishRefund is the share of a building's cost returned on demolition.
 	demolishRefund = 0.5
 	// iceToWater is how much water an ice drill gets from one unit of ice.

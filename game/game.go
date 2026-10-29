@@ -518,7 +518,7 @@ func (g *Game) drawLinks(screen *ebiten.Image) {
 	}
 	// What a building being placed would connect through.
 	if bt, ok := g.placing(); ok && g.pending != nil && p.CanBuild(bt, *g.pending) == nil {
-		if via, ok, _ := p.Connection(bt, *g.pending); ok {
+		if via, ok, _, _ := p.Connection(bt, *g.pending); ok {
 			g.drawArc(screen, p.Dir(*g.pending), p.Dir(via), 2*s, color.RGBA{90, 220, 255, 200}, true)
 		}
 	}

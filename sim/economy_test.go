@@ -117,7 +117,7 @@ func TestPylonChain(t *testing.T) {
 	}
 	// ...until a pylon within reach of the lander covers it.
 	py := Cell{Diamond: 4, I: 8, J: 3}
-	if _, ok, colony := p.Connection(Pylon, py); !ok || !colony {
+	if _, ok, colony, _ := p.Connection(Pylon, py); !ok || !colony {
 		t.Fatal("a pylon 5 tiles from the lander wouldn't connect to it")
 	}
 	mustBuild(t, p, Pylon, py)
@@ -127,7 +127,7 @@ func TestPylonChain(t *testing.T) {
 	if len(p.HubLinks()) != 1 {
 		t.Fatalf("hub links = %v, want just pylon–lander", p.HubLinks())
 	}
-	via, ok, colony := p.Connection(Smelter, Cell{Diamond: 4, I: 9, J: 2})
+	via, ok, colony, _ := p.Connection(Smelter, Cell{Diamond: 4, I: 9, J: 2})
 	if !ok || !colony || via != py {
 		t.Errorf("Connection = %v, %v, %v; want the pylon", via, ok, colony)
 	}
@@ -268,5 +268,45 @@ func TestOreDepositsExist(t *testing.T) {
 	}
 	if frac := float64(n) / float64(len(p.Tiles)); frac < 0.03 || frac > 0.25 {
 		t.Fatalf("ore on %.1f%% of tiles, want roughly a tenth", frac*100)
+	}
+}
+
+func TestHubCapacity(t *testing.T) {
+	p, _, _ := economyPlanet(t)
+	p.eco.Stores[Metal] = 1000
+	c := remote(p)
+	py := mustBuild(t, p, Pylon, c)
+	// Fill the pylon with panels next to it: each takes about 1 load.
+	var panels []*Building
+	for _, idx := range p.ringsAround(p.Grid.Index(c), 2)[1] {
+		panels = append(panels, mustBuild(t, p, SolarPanel, p.Grid.CellAt(idx)))
+	}
+	for _, idx := range p.ringsAround(p.Grid.Index(c), 2)[2] {
+		panels = append(panels, mustBuild(t, p, SolarPanel, p.Grid.CellAt(idx)))
+	}
+	load, capacity := p.HubLoad(py)
+	if load > capacity+1e-9 {
+		t.Fatalf("pylon load %.1f over capacity %.1f", load, capacity)
+	}
+	connected, full := 0, 0
+	for _, b := range panels {
+		if p.NetworkOf(b) == p.NetworkOf(py) {
+			connected++
+		} else if p.HubsFull(b) {
+			full++
+		}
+	}
+	if connected == 0 || full == 0 || connected+full != len(panels) {
+		t.Fatalf("%d panels connected, %d left out as full, of %d", connected, full, len(panels))
+	}
+	// The nearest ring is connected first.
+	for _, b := range panels[:6] {
+		if p.NetworkOf(b) != p.NetworkOf(py) {
+			t.Fatal("a panel next to the pylon was left out for a further one")
+		}
+	}
+	// Another pylon picks up the rest.
+	if _, ok, _, full := p.Connection(SolarPanel, p.Grid.CellAt(panels[len(panels)-1].Tile)); ok || !full {
+		t.Error("Connection doesn't report the pylon as full")
 	}
 }

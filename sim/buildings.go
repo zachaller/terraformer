@@ -89,7 +89,7 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Name:    "Heater",
 		Cost:    6,
 		PowerIn: 3,
-		Heat:    40,
+		Heat:    70,
 	},
 }
 

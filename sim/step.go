@@ -4,8 +4,8 @@ import "math"
 
 // Tuning constants, per simulation step.
 const (
-	tempRelax     = 0.05 // how fast a tile approaches its equilibrium temperature
-	tempDiffusion = 0.05 // how fast heat spreads to neighbours
+	tempRelax     = 0.02 // how fast a tile approaches its equilibrium temperature
+	tempDiffusion = 0.08 // how fast heat spreads to neighbours
 	meltRate      = 0.002
 	freezeRate    = 0.002
 	flowRate      = 0.2

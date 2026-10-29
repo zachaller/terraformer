@@ -71,7 +71,7 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.SolarPanel:    {"Makes 2 power", "Clean"},
 	sim.Mine:          {"Digs ore from a deposit", "1 power · pollutes"},
 	sim.Smelter:       {"Turns 2 ore into 1 metal", "2 power · pollutes"},
-	sim.HeaterMachine: {"+40° here, +20° around", "3 power · clean"},
+	sim.HeaterMachine: {"About +30° here, spreading out", "3 power · clean"},
 }
 
 // setTool switches tool, closing the menu and cancelling a half-made link.

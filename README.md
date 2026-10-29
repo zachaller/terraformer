@@ -52,7 +52,7 @@ shape a barren planet until life takes hold. See
 | Solar | 4 | Makes 2 power |
 | Mine | 6 | Digs ore from a deposit; uses 1 power; pollutes |
 | Smelter | 8 | Turns 2 ore into 1 metal; uses 2 power; pollutes heavily |
-| Heater | 6 | Warms its tile by up to +40 °C (neighbours +20 °C); uses 3 power |
+| Heater | 6 | Warms its tile by about +30 °C and the ring around it by about +19 °C, fading over the next few rings; uses 3 power |
 
 Links connect buildings into networks. A network shares its power (short of
 power, everything in it slows down and its links turn orange) and moves ore

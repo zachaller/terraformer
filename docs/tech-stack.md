@@ -78,6 +78,17 @@ regular check-ins on feel and performance.
 - **Scale:** a few thousand tiles (e.g. 6 × 32 × 32 ≈ 6,000), which is cheap in
   plain Go.
 
+## Game design decisions
+
+- **Open sandbox.** No levels or fail states; one planet you keep shaping.
+- **Emergent life.** The player never places life directly. Machines change
+  conditions (temperature, atmosphere, water, soil); life appears and spreads
+  on its own wherever conditions suit it, and dies back if they stop suiting it.
+- **Ecological succession.** Life arrives in stages, each needing the one before:
+  microbes → lichen/moss → grass → shrubs → forest on land; plankton → fish in
+  water; animals once there's enough plant life to feed them. Each stage has a
+  habitable range of conditions defined in `content/`.
+
 ## Play Store checklist (for later)
 
 - Google Play developer account (one-time $25 fee).
@@ -101,7 +112,7 @@ regular check-ins on feel and performance.
 
 ## Open design questions
 
-- Level-based (one planet per run, like Terra Nil) or an open sandbox?
-- Terra Nil's "recycle everything and leave" ending: yes or no?
-- Plants and biomes only, or animals too?
+- Machines as scaffolding: once an ecosystem can sustain itself, can or should
+  the player remove the machines? (A lighter, optional take on Terra Nil's
+  "recycle everything and leave".)
 - Development setup: is an Android device and Android Studio available?

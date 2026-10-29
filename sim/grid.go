@@ -179,14 +179,21 @@ func clampInt(v, lo, hi int) int { return min(max(v, lo), hi) }
 // latticeCoords returns the diamond direction d falls in and its continuous
 // lattice coordinates there.
 func (g Grid) latticeCoords(d Vec3) (dm int, i, j float64) {
+	// Only four faces span d's longitude: the two of the north diamond
+	// between upper-ring corners k and k+1, and the two of the south
+	// diamond between lower-ring corners k2 and k2+1. d is in whichever of
+	// them has its centre nearest.
+	s := math.Atan2(d.Z, d.X) / (2 * math.Pi / 5)
+	k := int(math.Floor(s)+5) % 5
+	k2 := int(math.Floor(s-0.5)+5) % 5
 	best, upper := math.Inf(-1), false
-	for k := range Diamonds {
-		c := &diamondCorners[k]
+	for _, cand := range [2]int{k, 5 + k2} {
+		c := &diamondCorners[cand]
 		if v := d.Dot(c.O.Add(c.P).Add(c.Q)); v > best {
-			best, dm, upper = v, k, false
+			best, dm, upper = v, cand, false
 		}
 		if v := d.Dot(c.R.Add(c.P).Add(c.Q)); v > best {
-			best, dm, upper = v, k, true
+			best, dm, upper = v, cand, true
 		}
 	}
 	c := &diamondCorners[dm]
@@ -198,8 +205,8 @@ func (g Grid) latticeCoords(d Vec3) (dm int, i, j float64) {
 	ba := d.Dot(c.P.Cross(c.Q))
 	bp := a.Dot(d.Cross(c.Q))
 	bq := a.Dot(c.P.Cross(d))
-	s := ba + bp + bq
-	_, wp, wq := latticeUnwarp(ba/s, bp/s, bq/s)
+	sum := ba + bp + bq
+	_, wp, wq := latticeUnwarp(ba/sum, bp/sum, bq/sum)
 	n := float64(g.N)
 	if upper {
 		return dm, n * (1 - wq), n * (1 - wp)
@@ -277,12 +284,6 @@ var diamondCorners = func() [Diamonds]corners {
 	}
 	return out
 }()
-
-// DiamondCorners returns the corners O, P, Q and R of diamond d.
-func DiamondCorners(d int) (o, p, q, r Vec3) {
-	c := diamondCorners[d]
-	return c.O, c.P, c.Q, c.R
-}
 
 // topology is the neighbour structure for one grid size, built once.
 type topology struct {

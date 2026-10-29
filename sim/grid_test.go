@@ -178,3 +178,28 @@ func TestNeighborsAreClose(t *testing.T) {
 		t.Errorf("TileAngle() = %v, want about %v", g.TileAngle(), want)
 	}
 }
+
+func TestFaceSearch(t *testing.T) {
+	// latticeCoords only checks the four faces at d's longitude; the face it
+	// picks must be as near as the nearest of all twenty.
+	g := Grid{N: 9}
+	nearest := func(d Vec3, k int) float64 {
+		c := &diamondCorners[k]
+		return math.Max(d.Dot(c.O.Add(c.P).Add(c.Q)), d.Dot(c.R.Add(c.P).Add(c.Q)))
+	}
+	for a := range 200 {
+		for b := range 200 {
+			z := 1 - 2*(float64(a)+0.5)/200
+			r := math.Sqrt(1 - z*z)
+			phi := 2 * math.Pi * float64(b) / 200
+			d := Vec3{r * math.Cos(phi), z, r * math.Sin(phi)}
+			best := math.Inf(-1)
+			for k := range Diamonds {
+				best = math.Max(best, nearest(d, k))
+			}
+			if got, _, _ := g.latticeCoords(d); best-nearest(d, got) > 1e-9 {
+				t.Fatalf("%v: latticeCoords picked diamond %d, not the nearest face", d, got)
+			}
+		}
+	}
+}

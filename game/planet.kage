@@ -20,7 +20,6 @@ var Row1 vec3
 var Row2 vec3
 var N float          // lattice steps along each icosahedron edge
 var TileAngle float  // average angle between neighbouring tile centres
-var Diamond [40]vec3 // each diamond's corners O, P, Q, R in turn
 var Selected float   // selected tile's index, or -1 for none
 var Time float       // seconds
 var Light vec3       // unit light direction, view space
@@ -46,7 +45,7 @@ func latticeWarp(w vec3) vec3 {
 
 func latticeUnwarp(b vec3) vec3 {
 	l := 1 - latticeWarpC/3
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		s := sqrt(max(1-4*latticeWarpC*l*b, vec3(1e-6)))
 		h := dot((1-s)/(2*latticeWarpC), vec3(1)) - 1
 		l -= h / dot(b/s, vec3(1))
@@ -54,38 +53,104 @@ func latticeUnwarp(b vec3) vec3 {
 	return (1 - sqrt(max(1-4*latticeWarpC*l*b, vec3(0)))) / (2 * latticeWarpC)
 }
 
+// upperCorner and lowerCorner are the icosahedron's corners on its upper
+// ring (26.6°N, longitude 72k) and lower ring (26.6°S, longitude 72k+36),
+// as in sim's diamondCorners.
+func upperCorner(k float) vec3 {
+	a := mod(k, 5) * 1.2566370614359172
+	return vec3(0.8944271909999159*cos(a), 0.4472135954999579, 0.8944271909999159*sin(a))
+}
+
+func lowerCorner(k float) vec3 {
+	a := (mod(k, 5) + 0.5) * 1.2566370614359172
+	return vec3(0.8944271909999159*cos(a), -0.4472135954999579, 0.8944271909999159*sin(a))
+}
+
+func cmul(a, b vec2) vec2 { return vec2(a.x*b.x-a.y*b.y, a.x*b.y+a.y*b.x) }
+
+// cornerO, cornerP, cornerQ and cornerR are diamond dm's corners.
+func cornerO(dm float) vec3 {
+	if dm < 5 {
+		return vec3(0, 1, 0)
+	}
+	return upperCorner(dm - 4)
+}
+
+func cornerP(dm float) vec3 {
+	if dm < 5 {
+		return upperCorner(dm)
+	}
+	return lowerCorner(dm - 5)
+}
+
+func cornerQ(dm float) vec3 {
+	if dm < 5 {
+		return upperCorner(dm + 1)
+	}
+	return lowerCorner(dm - 4)
+}
+
+func cornerR(dm float) vec3 {
+	if dm < 5 {
+		return lowerCorner(dm)
+	}
+	return vec3(0, -1, 0)
+}
+
 // latticeAt mirrors sim's Grid.latticeCoords: the diamond direction d falls
-// in (x) and its continuous lattice coordinates there (y, z).
+// in (x) and its continuous lattice coordinates there (y, z). Only the four
+// faces spanning d's longitude can hold it: two in the north diamond k, two
+// in the south diamond 5+k2.
 func latticeAt(d vec3) vec3 {
-	best := -10.0
-	dm := 0.0
+	s := atan2(d.z, d.x) / 1.2566370614359172
+	k := mod(floor(s), 5)
+	k2 := mod(floor(s-0.5), 5)
+	// Ring corners from two angles, stepping round by 36° and 72° with
+	// fixed rotations rather than more sin and cos.
+	a1 := k * 1.2566370614359172
+	a2 := (k2 + 0.5) * 1.2566370614359172
+	e1 := vec2(cos(a1), sin(a1)) // longitude of U_k
+	e2 := vec2(cos(a2), sin(a2)) // longitude of L_k2
+	c36 := vec2(0.8090169943749475, 0.5877852522924731)
+	c72 := vec2(0.30901699437494745, 0.9510565162951535)
+	r := 0.8944271909999159
+	h := 0.4472135954999579
+	un := vec3(0, 1, 0)
+	us := vec3(0, -1, 0)
+	uk := vec3(r*e1.x, h, r*e1.y)
+	f := cmul(e1, c72)
+	uk1 := vec3(r*f.x, h, r*f.y)
+	f = cmul(e1, c36)
+	lk := vec3(r*f.x, -h, r*f.y)
+	l2 := vec3(r*e2.x, -h, r*e2.y)
+	f = cmul(e2, c72)
+	l21 := vec3(r*f.x, -h, r*f.y)
+	f = cmul(e2, c36)
+	u2 := vec3(r*f.x, h, r*f.y)
+
+	// Faces as (first corner, P, Q): north diamond (N or L_k, U_k, U_k+1);
+	// south diamond (U_k2+1 or S, L_k2, L_k2+1).
+	dm := k
 	upper := false
-	a := vec3(0)
-	p := vec3(0)
-	q := vec3(0)
-	for k := 0; k < 10; k++ {
-		o := Diamond[4*k]
-		pk := Diamond[4*k+1]
-		qk := Diamond[4*k+2]
-		r := Diamond[4*k+3]
-		v := dot(d, o+pk+qk)
-		if v > best {
-			best = v
-			dm = float(k)
-			upper = false
-			a = o
-			p = pk
-			q = qk
-		}
-		v = dot(d, r+pk+qk)
-		if v > best {
-			best = v
-			dm = float(k)
-			upper = true
-			a = r
-			p = pk
-			q = qk
-		}
+	a := un
+	p := uk
+	q := uk1
+	best := dot(d, un+uk+uk1)
+	if v := dot(d, lk+uk+uk1); v > best {
+		best = v
+		upper = true
+		a = lk
+	}
+	if v := dot(d, u2+l2+l21); v > best {
+		best = v
+		dm = 5 + k2
+		upper = false
+		a, p, q = u2, l2, l21
+	}
+	if v := dot(d, us+l2+l21); v > best {
+		dm = 5 + k2
+		upper = true
+		a, p, q = us, l2, l21
 	}
 	b := vec3(dot(d, cross(p, q)), dot(a, cross(d, q)), dot(a, cross(p, d)))
 	w := latticeUnwarp(b / (b.x + b.y + b.z))
@@ -98,27 +163,15 @@ func latticeAt(d vec3) vec3 {
 // latticeDir mirrors sim.LatticeDir: the unit direction through lattice
 // point ij (in steps, not fractions) of diamond dm.
 func latticeDir(dm float, ij vec2) vec3 {
-	o := vec3(0)
-	p := vec3(0)
-	q := vec3(0)
-	r := vec3(0)
-	for k := 0; k < 10; k++ {
-		if float(k) == dm {
-			o = Diamond[4*k]
-			p = Diamond[4*k+1]
-			q = Diamond[4*k+2]
-			r = Diamond[4*k+3]
-		}
-	}
 	f := ij / N
-	a := o
+	a := cornerO(dm)
 	w := vec3(1-f.x-f.y, f.x, f.y)
 	if f.x+f.y > 1 {
-		a = r
+		a = cornerR(dm)
 		w = vec3(f.x+f.y-1, 1-f.y, 1-f.x)
 	}
 	b := latticeWarp(w)
-	return normalize(a*b.x + p*b.y + q*b.z)
+	return normalize(a*b.x + cornerP(dm)*b.y + cornerQ(dm)*b.z)
 }
 
 // tileLocal returns where planet-space direction d falls relative to the

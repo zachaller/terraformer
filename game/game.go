@@ -499,7 +499,6 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Row2":      vec3f(g.cam.rot[2]),
 		"N":         float32(grid.N),
 		"TileAngle": float32(grid.TileAngle()),
-		"Diamond":   diamondUniform(),
 		"Selected":  sel,
 		"Time":      float32(g.ticks) / float32(ebiten.TPS()),
 		"Light":     vec3f(lightDir),
@@ -512,19 +511,6 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"AreaTint":  tint,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
-}
-
-// diamondUniform lists every diamond's corners O, P, Q and R in turn, for
-// the shader.
-func diamondUniform() []float32 {
-	var out []float32
-	for d := range sim.Diamonds {
-		o, p, q, r := sim.DiamondCorners(d)
-		for _, v := range []sim.Vec3{o, p, q, r} {
-			out = append(out, vec3f(v)...)
-		}
-	}
-	return out
 }
 
 // highlighted is the tile to highlight: the start of a link being made, or

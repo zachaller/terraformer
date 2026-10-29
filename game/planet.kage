@@ -1,0 +1,92 @@
+//kage:unit pixels
+
+package main
+
+// Draws the starfield and the planet as a ray-traced sphere on one screen quad.
+// Source image 0 is the tile atlas: 6 faces side by side, N×N pixels each,
+// one pixel per tile.
+
+var Center vec2   // planet centre on screen, pixels
+var Radius float  // planet radius on screen, pixels
+var Row0 vec3     // rows of the world-to-view rotation
+var Row1 vec3
+var Row2 vec3
+var N float       // cells per face edge
+var Selected vec3 // selected cell (face, i, j); face < 0 means none
+var Time float    // seconds
+var Light vec3    // unit light direction, view space
+
+// faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1].
+func faceUV(d vec3) vec3 {
+	a := abs(d)
+	if a.x >= a.y && a.x >= a.z {
+		if d.x > 0 {
+			return vec3(0, -d.z/a.x, d.y/a.x)
+		}
+		return vec3(1, d.z/a.x, d.y/a.x)
+	}
+	if a.y >= a.z {
+		if d.y > 0 {
+			return vec3(2, d.x/a.y, -d.z/a.y)
+		}
+		return vec3(3, d.x/a.y, d.z/a.y)
+	}
+	if d.z > 0 {
+		return vec3(4, d.x/a.z, d.y/a.z)
+	}
+	return vec3(5, -d.x/a.z, d.y/a.z)
+}
+
+func hash(p vec2) float {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	atmo := vec3(0.45, 0.62, 1.0)
+
+	// Screen position relative to the planet, y up.
+	q := (dstPos.xy - Center) / Radius
+	q = vec2(q.x, -q.y)
+	r2 := dot(q, q)
+
+	if r2 > 1 {
+		space := vec3(0.01, 0.012, 0.03)
+		h := hash(floor(dstPos.xy))
+		if h > 0.997 {
+			space += vec3((h - 0.997) / 0.003 * 0.8)
+		}
+		// Thin atmospheric halo just outside the limb.
+		g := clamp(1-(sqrt(r2)-1)/0.06, 0, 1)
+		return vec4(mix(space, atmo, g*g*0.5), 1)
+	}
+
+	// Surface normal in view space, then rotate back to planet space.
+	n := vec3(q, sqrt(1-r2))
+	d := Row0*n.x + Row1*n.y + Row2*n.z
+
+	f := faceUV(d)
+	st := (f.yz + 1) / 2 * N
+	ij := clamp(floor(st), vec2(0), vec2(N-1))
+	texel := imageSrc0Origin() + vec2(f.x*N+ij.x+0.5, ij.y+0.5)
+	base := imageSrc0UnsafeAt(texel).rgb
+
+	// Tile grid lines, faded out when tiles are small on screen.
+	g := fract(st)
+	w := max(fwidth(st), vec2(1e-4))
+	edge := min(min(g.x, 1-g.x)/w.x, min(g.y, 1-g.y)/w.y)
+	lineAmt := 1 - clamp(edge, 0, 1)
+	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.3
+	base *= 1 - lineAmt*strength
+
+	if Selected.x >= 0 && f.x == Selected.x && ij.x == Selected.y && ij.y == Selected.z {
+		pulse := 0.5 + 0.5*sin(Time*6)
+		base = mix(base, vec3(1, 0.85, 0.2), 0.45+0.25*pulse)
+	}
+
+	diff := max(dot(n, Light), 0)
+	col := base * (0.15 + 0.95*diff)
+
+	rim := pow(1-n.z, 3)
+	col = mix(col, atmo, rim*0.55)
+	return vec4(col, 1)
+}

@@ -1,6 +1,6 @@
 # Terraformer: Tech Stack & Architecture
 
-Status: decided (early planning). No code written yet.
+Status: decided. Globe prototype (roadmap step 1) is built; see README.md.
 
 ## The game in one paragraph
 
@@ -135,7 +135,7 @@ capacity-limited routing turns out to matter for gameplay.
 
 ## Roadmap
 
-1. **Globe prototype (desktop):** rotating shader planet, drag to rotate, pinch or
+1. ✅ **Globe prototype (desktop):** rotating shader planet, drag to rotate, pinch or
    scroll to zoom, tap to highlight a tile.
 2. **Globe prototype on a phone:** same thing via `ebitenmobile`; check feel and
    frame rate.

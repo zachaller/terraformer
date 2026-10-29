@@ -242,42 +242,17 @@ func (g *Game) diagnosisBody(u *ui, msg, fix string, action func(), x, y, w floa
 // lifeChecklist shows whether microbes can live on the tile, and why not.
 func (g *Game) lifeChecklist(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) float64 {
 	y0 := y
-	u.text("CAN MICROBES LIVE HERE?", x, y, sans, 11, semibold, colMuted)
-	y += u.lineH(sans, 11, semibold) + 4
+	u.text("MICROBES", x, y, sans, 11, semibold, colMuted)
+	y += u.lineH(sans, 11, semibold) + 6
 
 	warm := t.Temp > sim.MinLifeTemp && t.Temp < sim.MaxLifeTemp
 	damp := t.Water > sim.MinLifeWater
 	clean := t.Pollution < sim.MaxLifePollution
-	warmReq := "(above −5°)"
-	if t.Temp >= sim.MaxLifeTemp {
-		warmReq = "(below 60°)"
-	}
-	rows := []struct {
-		ok         bool
-		label, val string
-		req        string
-	}{
-		{warm, "Warm enough", degrees(t.Temp), warmReq},
-		{damp, "Damp ground", fmt.Sprintf("%.2f", t.Water), "(needs moisture)"},
-		{clean, "Clean enough", fmt.Sprintf("%.2f", t.Pollution), "(max 0.25)"},
-	}
-	for i, r := range rows {
-		rh := 34.0
-		ic, col := iconCheck, color.Color(colTeal)
-		valCol := color.Color(colIcon)
-		if !r.ok {
-			ic, col, valCol = iconCross, colRed, colRed
-		}
-		u.icon(ic, x, y+(rh-18)/2, 18, col)
-		u.text(r.label, x+28, y+(rh-u.lineH(sans, 13, regular))/2, sans, 13, regular, colText)
-		reqW := u.textW(" "+r.req, sans, 12, regular)
-		u.textRight(r.req, x+w, y+(rh-u.lineH(sans, 12, regular))/2, sans, 12, regular, colMuted)
-		u.textRight(r.val, x+w-reqW, y+(rh-u.lineH(mono, 13, semibold))/2, mono, 13, semibold, valCol)
-		if i < len(rows)-1 {
-			u.fillRound(x, y+rh-1, w, 1, 0, rgba(0x1F2836))
-		}
-		y += rh
-	}
+	y = u.flowChips([]chip{
+		checkChip(warm, "Warm", degrees(t.Temp)),
+		checkChip(damp, "Damp", fmt.Sprintf("%.2f", t.Water)),
+		checkChip(clean, "Clean", fmt.Sprintf("%.2f", t.Pollution)),
+	}, x, x+w, y) + 6
 
 	var summary string
 	switch {
@@ -300,9 +275,18 @@ func (g *Game) lifeChecklist(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) flo
 	case !damp:
 		summary = "Too dry. Melt ice here or uphill, so water reaches it."
 	}
-	y += 4
 	y += u.paragraph(summary, x, y, w, 12, colBody)
 	return y - y0 + 12
+}
+
+// checkChip is a small requirement: a tick or cross, a label and a value.
+func checkChip(ok bool, label, val string) chip {
+	ic, col := iconCheck, color.Color(colTeal)
+	valCol := color.Color(colText)
+	if !ok {
+		ic, col, valCol = iconCross, colRed, colRed
+	}
+	return chip{parts: []chipPart{iconPart(ic, col), labelPart(label), numPart(val, valCol)}, fill: colCard}
 }
 
 // runningMessage describes what a building that's running normally does.
@@ -478,24 +462,20 @@ func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
 		return y - y0 + 12
 	}
 	u.text("NEXT: "+strings.ToUpper(next.String()), x, y, sans, 11, semibold, colMuted)
-	y += u.lineH(sans, 11, semibold) + 2
-	reqs := g.planet.Requirements(next, t)
-	for i, r := range reqs {
-		rh := 30.0
-		ic, col, valCol := iconCheck, color.Color(colTeal), color.Color(colIcon)
-		if !r.OK {
-			ic, col, valCol = iconCross, colRed, colRed
+	y += u.lineH(sans, 11, semibold) + 6
+	// What's missing, in full; what's met, as a count.
+	var need []chip
+	met := 0
+	for _, r := range g.planet.Requirements(next, t) {
+		if r.OK {
+			met++
+			continue
 		}
-		u.icon(ic, x, y+(rh-16)/2, 16, col)
-		u.text(r.Label, x+26, y+(rh-u.lineH(sans, 13, regular))/2, sans, 13, regular, colText)
-		need := " (" + r.Need + ")"
-		needW := u.textW(need, sans, 11, regular)
-		u.textRight(need, x+w, y+(rh-u.lineH(sans, 11, regular))/2, sans, 11, regular, colMuted)
-		u.textRight(r.Have, x+w-needW, y+(rh-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, valCol)
-		if i < len(reqs)-1 {
-			u.fillRound(x, y+rh-1, w, 1, 0, rgba(0x1F2836))
-		}
-		y += rh
+		need = append(need, checkChip(false, r.Label, r.Have+" / "+r.Need))
 	}
+	if met > 0 {
+		need = append(need, chip{parts: []chipPart{iconPart(iconCheck, colTeal), numPart(fmt.Sprintf("%d met", met), colTealTx)}, fill: colCard})
+	}
+	y = u.flowChips(need, x, x+w, y)
 	return y - y0 + 12
 }

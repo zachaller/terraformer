@@ -21,19 +21,19 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Dig for ore",
-		Hint: "Build > Industry > Mine: build it on iron ore (gold in the Industry view), then Link it to the lander",
+		Hint: "Build > Industry > Mine: build it on iron ore (gold in the Industry view) within 8 tiles of the lander, and it links itself",
 		Progress: func(p *Planet) float64 {
 			return boolProgress(p.anyRunning(Mine, true, 0.01))
 		},
 	},
 	{
 		Name:     "Make metal",
-		Hint:     "Build a Smelter and link it to the lander. It turns ore into metal",
+		Hint:     "Build a Smelter near the lander. It turns ore into metal",
 		Progress: func(p *Planet) float64 { return p.eco.Produced[Metal] / 10 },
 	},
 	{
 		Name: "Warm the ground",
-		Hint: "Build a Heater and link it. It needs 3 power: add Solar panels to the network",
+		Hint: "Build a Heater. It needs 3 power: add Solar panels to its network. Pylons connect everything within 4 tiles",
 		Progress: func(p *Planet) float64 {
 			return boolProgress(p.anyRunning(HeaterMachine, false, 0.99))
 		},

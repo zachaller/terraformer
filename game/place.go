@@ -29,17 +29,51 @@ func (g *Game) confirmPlacement() {
 		return
 	}
 	c := *g.pending
-	if _, err := g.planet.Build(bt, c); err != nil {
+	p := g.planet
+	target, linkable, covered := p.AutoLink(bt, c)
+	if _, err := p.Build(bt, c); err != nil {
 		g.showMessage(err.Error(), msgWarn)
 		return
 	}
 	g.pending = nil
 	g.atlasDirty = true
-	g.showMessageAction(fmt.Sprintf("Built a %s. Link it to a network to run it", bt), msgGood, "Link it", func() {
-		g.setTool(toolLink)
-		g.linkFrom = &c
-		g.showMessage("Drag from the new building to another, or tap the one to link it to", msgInfo)
-	})
+	switch {
+	case covered:
+		g.showMessage(fmt.Sprintf("Built a %s, connected by a pylon", bt), msgGood)
+	case linkable && p.Link(c, target) == nil:
+		g.showMessage(fmt.Sprintf("Built a %s and linked it to the %s", bt, lower(p.BuildingAt(target).Spec().Name)), msgGood)
+	default:
+		g.showMessageAction(fmt.Sprintf("Built a %s, but it isn't linked to anything", bt), msgWarn, "Link it", func() {
+			g.setTool(toolLink)
+			g.linkFrom = &c
+			g.showMessage("Drag from the new building to another, or tap the one to link it to", msgInfo)
+		})
+	}
+}
+
+// connectionRow describes how a building placed on c would join the
+// colony, for the placement preview, and the extra metal its link costs.
+func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) (previewRow, float64) {
+	p := g.planet
+	target, ok, covered := p.AutoLink(bt, c)
+	switch {
+	case covered:
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "through a pylon · free", colTeal}, 0
+	case ok:
+		cost := p.LinkCost(c, target)
+		where := lower(p.BuildingAt(target).Spec().Name)
+		col := color.Color(colText)
+		if !p.NetworkOf(p.BuildingAt(target)).HasDepot {
+			where += " (not the colony)"
+			col = colAmber
+		}
+		return previewRow{iconLink, rgba(0x5AD1F5), "Links to", fmt.Sprintf("%s · %.1f metal", where, cost), col}, cost
+	}
+	need := "nothing in reach"
+	if sim.Specs[bt].PowerIn > 0 {
+		need = "nothing in reach: needs its own power"
+	}
+	return previewRow{iconLink, colAmber, "Links to", need, colAmber}, 0
 }
 
 // maxAreaCells is the most tiles a placement preview tints: four rings of
@@ -100,6 +134,11 @@ func (g *Game) placementArea(bt sim.BuildingType, c sim.Cell) ([]areaTint, color
 		return fade(spec.DustRings, rgba(0xB08A6A))
 	case spec.SeedRings > 0:
 		return fade(spec.SeedRings, colTeal)
+	case spec.CoverRadius > 0:
+		for _, a := range areaCells(g.planet.Grid, c, int(spec.CoverRadius)) {
+			out = append(out, areaTint{a.cell, 0.2})
+		}
+		return out, rgba(0x5AD1F5)
 	case bt == sim.Comet:
 		for _, a := range areaCells(g.planet.Grid, c, 2) {
 			out = append(out, areaTint{a.cell, full})
@@ -240,12 +279,19 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		rows = append(rows, previewRow{iconAir, colAmber, "Air lost now", fmt.Sprintf("%.3f kPa a year", p.EscapePerDay()*365), colText})
 	case sim.Biolab:
 		rows = append(rows, previewRow{iconLeaf, colTeal, "Seeds life", fmt.Sprintf("up to %d tiles around", spec.SeedRings), colText})
+	case sim.Pylon:
+		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Connects", fmt.Sprintf("everything within %.0f tiles", spec.CoverRadius), colText})
+		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Links reach", fmt.Sprintf("%.0f tiles", spec.LinkReach), colText})
 	case sim.CarbonScrubber:
 		rows = append(rows, previewRow{iconAir, colCO2, "Removes", fmt.Sprintf("%.2f kPa a year of CO2", -spec.Emits.CO2*3650), colText})
 	case sim.Comet:
 		rows = append(rows, previewRow{iconDrop, colBlue, "Brings", "water, nitrogen and CO2", colText})
 		rows = append(rows, previewRow{iconWarning, colRed, "Strikes in", fmt.Sprintf("%d days", spec.Countdown/10), colText})
 		warning = "The impact destroys everything within two tiles and leaves a crater."
+	}
+	if bt != sim.Comet && bt != sim.OrbitalMirror {
+		row, _ := g.connectionRow(bt, c)
+		rows = append(rows, row)
 	}
 	if spec.PowerIn > 0 && p.Landed() {
 		n := p.NetworkOf(p.Buildings()[0])
@@ -273,7 +319,11 @@ func (g *Game) placementPanel(u *ui, left, right, bottom float64) float64 {
 	u.icon(iconCross, left+20, by+20, 24, colIcon)
 	u.area(left, by, 64, barH, func() { g.pending = nil })
 	bx, bw := left+64+gap, right-left-64-gap
-	label := fmt.Sprintf("Build here · %.0f metal", sim.Specs[bt].Cost)
+	_, linkCost := g.connectionRow(bt, c)
+	label := fmt.Sprintf("Build here · %.1f metal", sim.Specs[bt].Cost+linkCost)
+	if linkCost == 0 {
+		label = fmt.Sprintf("Build here · %.0f metal", sim.Specs[bt].Cost)
+	}
 	fill, fg := color.Color(colAmber), color.Color(colOnAmber)
 	if err != nil {
 		fill, fg = colCard, colMuted
@@ -377,7 +427,7 @@ func (g *Game) drawLinkPreview(screen *ebiten.Image) {
 	a := p.Dir(d.from)
 
 	// Reach: a dashed circle MaxLinkLength tiles around the source.
-	reach := sim.MaxLinkLength * p.Grid.TileAngle()
+	reach := sim.LinkReach(p.BuildingAt(d.from).Type) * p.Grid.TileAngle()
 	ref := sim.Vec3{Y: 1}
 	if math.Abs(a.Y) > 0.9 {
 		ref = sim.Vec3{X: 1}

@@ -73,6 +73,7 @@ shape a barren planet until life takes hold. See
 |---|---|---|---|
 | Lander | free, placed first | | Holds the colony stores; makes 3 power |
 | Solar | 4 | | Makes 2 power |
+| Pylon | 3 | | Connects every building within 4 tiles into its network without links; its links reach 12 tiles |
 | Wind turbine | 10 | Thicken the air | Up to 6 power, from 2 kPa, full at 40 kPa |
 | Geothermal | 18 | First life | 10 power on a volcanic tile; warms it |
 | Mine | 6 | | Digs a deposit: iron ore, fluorite or nitrate; 1 power; pollutes |
@@ -89,7 +90,9 @@ shape a barren planet until life takes hold. See
 | Biolab | 30 | First life | Life takes hold far faster up to 3 tiles around; 3 power |
 | Comet | 120 | Thaw | Strikes 30 days after it's aimed: water, nitrogen and CO₂, a crater, and destruction 2 tiles around; one at a time |
 
-Links connect buildings into networks. A network shares its power (short of
+Links connect buildings into networks. A new building links itself to the
+nearest building in reach (preferring the lander's network); the placement
+preview shows the link and its cost, or that a pylon connects it for free. A network shares its power (short of
 power, everything in it slows down and its links turn orange) and moves ore
 and metal between buildings. Networks linked to the lander send surplus into
 the colony stores, which pay for construction, and feed machines from them.
@@ -115,7 +118,7 @@ live there and what's stopping them, and the building's network.
 | Use the current tool on a tile | Tap | Click |
 | Build menu (by category: Power, Industry, Climate, Air, Projects; and new planet) | **Build** | `B`, or `1`–`4` for Solar, Mine, Smelter, Heater |
 | Place a building: tap a tile to preview it (heat or pollution area, effects, warnings), tap another to move it, then **Build here** | Tap, then **Build here** | Click, then `Enter` |
-| Link buildings: drag from one to another (shows reach and cost); or tap one, then the other | **Link**, then drag | `L`, then drag |
+| Link buildings by hand (new buildings link themselves): drag from one to another (shows reach and cost); or tap one, then the other | **Link**, then drag | `L`, then drag |
 | Inspect a tile or building | **Inspect** | `I` |
 | Remove a building (half its metal back) | **Remove** | `X` |
 | Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |

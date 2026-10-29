@@ -264,3 +264,46 @@ func TestOreDepositsExist(t *testing.T) {
 		t.Fatalf("ore on %.1f%% of tiles, want roughly a tenth", frac*100)
 	}
 }
+
+func TestPylons(t *testing.T) {
+	p, lander, _ := economyPlanet(t)
+	p.eco.Stores[Metal] = 1000
+	unlockAll(p)
+	far := Cell{Diamond: 4, I: 8, J: 1} // 7 lattice steps from the lander
+	py := Cell{Diamond: 4, I: 8, J: 3}
+	mustBuild(t, p, SolarPanel, far)
+	if p.NetworkOf(p.BuildingAt(far)).HasDepot {
+		t.Fatal("unlinked panel is in the lander's network")
+	}
+	// A pylon covers the panel, and links to the lander.
+	if _, _, covered := p.AutoLink(Pylon, py); !covered {
+		t.Fatal("a new pylon next to a panel isn't counted as connected")
+	}
+	mustBuild(t, p, Pylon, py)
+	mustLink(t, p, py, lander)
+	if !p.NetworkOf(p.BuildingAt(far)).HasDepot {
+		t.Fatal("the pylon didn't connect the panel to the lander")
+	}
+	// Buildings near a pylon need no link.
+	if _, _, covered := p.AutoLink(Smelter, Cell{Diamond: 4, I: 9, J: 3}); !covered {
+		t.Error("a tile next to a pylon isn't covered")
+	}
+}
+
+func TestAutoLinkPrefersColony(t *testing.T) {
+	p, lander, _ := economyPlanet(t)
+	p.eco.Stores[Metal] = 1000
+	lone := Cell{Diamond: 4, I: 12, J: 8}
+	mustBuild(t, p, SolarPanel, lone)
+	// From a tile nearer the lone panel than the lander, still link to the
+	// lander's network.
+	c := Cell{Diamond: 4, I: 11, J: 8}
+	target, ok, covered := p.AutoLink(Smelter, c)
+	if !ok || covered || target != lander {
+		t.Errorf("AutoLink = %v, %v, %v; want the lander", target, ok, covered)
+	}
+	// Out of everyone's reach: nothing.
+	if _, ok, covered := p.AutoLink(Smelter, Cell{Diamond: 7, I: 8, J: 8}); ok || covered {
+		t.Error("AutoLink found a link from the far side of the planet")
+	}
+}

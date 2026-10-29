@@ -53,6 +53,7 @@ const (
 	MagneticShield
 	Biolab
 	CarbonScrubber
+	Pylon
 	NumBuildingTypes
 )
 
@@ -137,6 +138,11 @@ type BuildingSpec struct {
 	// Countdown is how many steps a comet takes to arrive.
 	Countdown int
 
+	// LinkReach is how far, in tiles, links to or from it can reach, if
+	// further than MaxLinkLength. CoverRadius is how far, in tiles, it
+	// connects every building around it without links.
+	LinkReach, CoverRadius float64
+
 	// Depot buildings connect a network to the colony stores: surplus
 	// output goes into the stores, and consumers can draw from them.
 	Depot bool
@@ -157,6 +163,13 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Category: CatPower,
 		Cost:     4,
 		PowerOut: 2,
+	},
+	Pylon: {
+		Name:        "Pylon",
+		Category:    CatPower,
+		Cost:        3,
+		LinkReach:   12,
+		CoverRadius: 4,
 	},
 	WindTurbine: {
 		Name:       "Wind turbine",

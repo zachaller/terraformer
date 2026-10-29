@@ -547,26 +547,44 @@ func (g *Game) gridAmount() float64 {
 // drawLinks draws each link as a line hugging the planet's surface, hiding
 // the parts on the far side. Links in networks short of power are orange.
 func (g *Game) drawLinks(screen *ebiten.Image) {
-	const segments = 12
 	p := g.planet
 	s := float32(ebiten.Monitor().DeviceScaleFactor())
+	colour := func(tile int) color.RGBA {
+		if p.NetworkOf(p.BuildingAt(p.Grid.CellAt(tile))).PowerSatisfaction() < 1 {
+			return color.RGBA{255, 150, 40, 255}
+		}
+		return color.RGBA{90, 220, 255, 255}
+	}
 	for _, l := range p.Links() {
-		a := p.Dir(p.Grid.CellAt(l[0]))
-		b := p.Dir(p.Grid.CellAt(l[1]))
-		clr := color.RGBA{90, 220, 255, 255}
-		if p.NetworkOf(p.BuildingAt(p.Grid.CellAt(l[0]))).PowerSatisfaction() < 1 {
-			clr = color.RGBA{255, 150, 40, 255}
+		g.drawArc(screen, p.Dir(p.Grid.CellAt(l[0])), p.Dir(p.Grid.CellAt(l[1])), 2*s, colour(l[0]), false)
+	}
+	// Pylons' connections without links: faint spokes.
+	for _, sp := range p.Spokes() {
+		c := colour(sp[0])
+		c.A = 90
+		g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, c, false)
+	}
+	// The link a building being placed will make.
+	if bt, ok := g.placing(); ok && g.pending != nil && p.CanBuild(bt, *g.pending) == nil {
+		if target, ok, _ := p.AutoLink(bt, *g.pending); ok {
+			g.drawArc(screen, p.Dir(*g.pending), p.Dir(target), 2*s, color.RGBA{90, 220, 255, 200}, true)
 		}
-		px, py, pvis := g.cam.project(a)
-		for i := 1; i <= segments; i++ {
-			t := float64(i) / segments
-			d := a.Scale(1 - t).Add(b.Scale(t)).Normalize()
-			x, y, vis := g.cam.project(d)
-			if vis && pvis {
-				vector.StrokeLine(screen, float32(px), float32(py), float32(x), float32(y), 2*s, clr, true)
-			}
-			px, py, pvis = x, y, vis
+	}
+}
+
+// drawArc draws a line along the planet's surface from a to b, dashed if
+// asked.
+func (g *Game) drawArc(screen *ebiten.Image, a, b sim.Vec3, width float32, clr color.Color, dashed bool) {
+	const segments = 12
+	px, py, pvis := g.cam.project(a)
+	for i := 1; i <= segments; i++ {
+		t := float64(i) / segments
+		d := a.Scale(1 - t).Add(b.Scale(t)).Normalize()
+		x, y, vis := g.cam.project(d)
+		if vis && pvis && (!dashed || i%2 == 1) {
+			vector.StrokeLine(screen, float32(px), float32(py), float32(x), float32(y), width, clr, true)
 		}
+		px, py, pvis = x, y, vis
 	}
 }
 

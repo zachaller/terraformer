@@ -165,7 +165,7 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 			g.showMessage("Tap a tile to place the solar panel, then link it into this network", msgInfo)
 		}
 	case sim.StatusNoPower:
-		msg = "No power. Link it to the lander or a Solar panel."
+		msg = "No power. Link it to the colony, or build a Pylon within 4 tiles of it."
 		fix, action = "Link it", linkIt
 	case sim.StatusNoInput:
 		msg = fmt.Sprintf("Waiting for %s. Link it to the lander, which shares the colony's stores, or to a mine.", lower(st.Resource.String()))
@@ -304,6 +304,8 @@ func runningMessage(p *sim.Planet, b *sim.Building) string {
 	switch b.Type {
 	case sim.Lander:
 		return fmt.Sprintf("Makes %.0f power and holds the colony's stores.", spec.PowerOut)
+	case sim.Pylon:
+		return fmt.Sprintf("Connects every building within %.0f tiles to its network, and links up to %.0f tiles away.", spec.CoverRadius, spec.LinkReach)
 	case sim.SolarPanel, sim.Geothermal:
 		return fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
 	case sim.WindTurbine:

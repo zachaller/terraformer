@@ -467,6 +467,14 @@ func building(bt float, p vec2, act float, aa float) vec4 {
 		}
 		return o
 	}
+	if bt == 18 { // pylon: a lattice tower with glowing insulators
+		o = paint(o, vec3(0.2, 0.25, 0.32), cover(sdCircle(p, 0.16), aa)*0.6)
+		tower := min(min(sdSeg(p, vec2(-0.12, -0.38), vec2(0, 0.36)), sdSeg(p, vec2(0.12, -0.38), vec2(0, 0.36))), min(sdSeg(p, vec2(-0.3, 0.22), vec2(0.3, 0.22)), sdSeg(p, vec2(-0.2, 0.02), vec2(0.2, 0.02))))
+		o = paint(o, vec3(0.6, 0.66, 0.74), cover(tower-0.022, aa))
+		glow := 0.7 + 0.3*sin(Time*3)
+		o = paint(o, vec3(0.35, 0.82, 0.96)*glow, cover(min(sdCircle(p-vec2(-0.3, 0.22), 0.05), sdCircle(p-vec2(0.3, 0.22), 0.05)), aa))
+		return o
+	}
 	if bt == 16 { // biolab: glass dome with plants inside
 		o = paint(o, vec3(0.6, 0.66, 0.74), cover(sdCircle(p, 0.4), aa))
 		o = paint(o, vec3(0.16, 0.3, 0.3), cover(sdCircle(p, 0.34), aa))

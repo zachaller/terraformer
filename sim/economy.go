@@ -254,13 +254,78 @@ func (p *Planet) CanLink(a, b Cell) error {
 	if _, ok := p.eco.links[linkKey(ia, ib)]; ok {
 		return ErrAlreadyLinked
 	}
-	if l := p.LinkLength(a, b); l > MaxLinkLength {
-		return fmt.Errorf("Too far: %.0f tiles (links reach %d)", l, MaxLinkLength)
+	if l, reach := p.LinkLength(a, b), max(linkReach(p.eco.at[ia]), linkReach(p.eco.at[ib])); l > reach {
+		return fmt.Errorf("Too far: %.0f tiles (links reach %.0f)", l, reach)
 	}
 	if cost := p.LinkCost(a, b); p.eco.Stores[Metal] < cost {
 		return fmt.Errorf("Link needs %.1f metal; the stores have %.1f", cost, p.eco.Stores[Metal])
 	}
 	return nil
+}
+
+// linkReach is how far links from b can reach, in tiles.
+func linkReach(b *Building) float64 { return LinkReach(b.Type) }
+
+// LinkReach is how far links from a building of type t can reach, in tiles.
+func LinkReach(t BuildingType) float64 { return max(Specs[t].LinkReach, MaxLinkLength) }
+
+// Covers reports whether building b connects a building on tile idx
+// without a link, being a pylon close enough.
+func (p *Planet) covers(b *Building, idx int) bool {
+	r := b.Spec().CoverRadius
+	return r > 0 && b.Tile != idx && p.LinkLength(p.Grid.CellAt(b.Tile), p.Grid.CellAt(idx)) <= r
+}
+
+// Spokes returns the connections pylons make without links, as pairs of
+// tile indices (pylon first).
+func (p *Planet) Spokes() [][2]int {
+	var out [][2]int
+	for _, py := range p.eco.buildings {
+		if py.Spec().CoverRadius == 0 {
+			continue
+		}
+		for _, b := range p.eco.buildings {
+			if p.covers(py, b.Tile) {
+				out = append(out, [2]int{py.Tile, b.Tile})
+			}
+		}
+	}
+	return out
+}
+
+// AutoLink is how a building of type t placed on c would join a network:
+// covered means a pylon (or, for a new pylon, a building nearby) connects
+// it without a link; otherwise target is the building it should link to,
+// if any is in reach: the nearest in the lander's network, or failing
+// that the nearest at all.
+func (p *Planet) AutoLink(t BuildingType, c Cell) (target Cell, ok, covered bool) {
+	p.updateNetworks()
+	idx := p.Grid.Index(c)
+	r := Specs[t].CoverRadius
+	best, bestScore := -1, math.Inf(1)
+	for _, b := range p.eco.buildings {
+		if b.Tile == idx {
+			continue
+		}
+		d := p.LinkLength(c, p.Grid.CellAt(b.Tile))
+		if p.covers(b, idx) || r > 0 && d <= r {
+			return Cell{}, false, true
+		}
+		if d > max(LinkReach(t), linkReach(b)) {
+			continue
+		}
+		score := d
+		if !p.eco.networks[b.network].HasDepot {
+			score += 1000 // only if nothing in the lander's network is in reach
+		}
+		if score < bestScore {
+			best, bestScore = b.Tile, score
+		}
+	}
+	if best < 0 {
+		return Cell{}, false, false
+	}
+	return p.Grid.CellAt(best), true, false
 }
 
 // Link joins the buildings on a and b, paying for it from the stores.
@@ -301,11 +366,17 @@ func (p *Planet) updateNetworks() {
 	for _, b := range e.buildings {
 		parent[b.Tile] = b.Tile
 	}
-	for _, l := range p.Links() {
-		ra, rb := find(l[0]), find(l[1])
+	union := func(a, b int) {
+		ra, rb := find(a), find(b)
 		if ra != rb {
 			parent[max(ra, rb)] = min(ra, rb)
 		}
+	}
+	for _, l := range p.Links() {
+		union(l[0], l[1])
+	}
+	for _, s := range p.Spokes() {
+		union(s[0], s[1])
 	}
 
 	sorted := slices.Clone(e.buildings)

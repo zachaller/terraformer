@@ -62,6 +62,7 @@ var speeds = []struct {
 // buildInfo is the build menu's description of each building.
 var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.SolarPanel:        {"Makes 2 power", "Clean"},
+	sim.Pylon:             {"Connects all within 4 tiles; links reach 12", "No power needed"},
 	sim.WindTurbine:       {"Up to 6 power once the air is thick", "Clean"},
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
@@ -777,6 +778,14 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 		ring(7, 1.2, rgba(0x73A6FF))
 		u.circle(cx, cy, 4*k, rgba(0x9AA6B8))
 		u.circle(cx-1*k, cy-1*k, 1.8*k, rgba(0xC0E0FF))
+	case sim.Pylon:
+		line(0, -10, 0, 10, 1.6, rgba(0x9AA6B8))
+		line(-7, -6, 7, -6, 1.4, rgba(0x9AA6B8))
+		line(-5, -1, 5, -1, 1.2, rgba(0x9AA6B8))
+		line(-4, 10, 0, 2, 1.2, rgba(0x9AA6B8))
+		line(4, 10, 0, 2, 1.2, rgba(0x9AA6B8))
+		u.circle(cx-7*k, cy-6*k, 1.5*k, rgba(0x5AD1F5))
+		u.circle(cx+7*k, cy-6*k, 1.5*k, rgba(0x5AD1F5))
 	case sim.CarbonScrubber:
 		u.fillRound(x+3*k, y+5*k, 18*k, 15*k, 3, rgba(0x55606E))
 		for i := range 3 {

@@ -10,7 +10,7 @@ import (
 
 // inspectOpen reports whether the inspect sheet is showing.
 func (g *Game) inspectOpen() bool {
-	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && g.planet.Landed()
+	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && !g.goalsOpen && g.planet.Landed()
 }
 
 // inspectSheet draws the inspect sheet along the bottom of the screen (from

@@ -91,6 +91,7 @@ type Game struct {
 	linkDrag *linkDrag // a link being dragged out
 
 	goalCollapsed bool
+	goalsOpen     bool      // the goals sheet is showing
 	metalHist     []float64 // metal produced so far, sampled each day
 
 	// planetTarget is the screen area (x, y, w, h in pixels) the UI leaves
@@ -262,25 +263,6 @@ func (g *Game) Update() error {
 	return nil
 }
 
-// announceGoals shows a message when goals are completed.
-func (g *Game) announceGoals() {
-	done := g.planet.GoalsDone()
-	if done <= g.goalsSeen {
-		return
-	}
-	g.goalsSeen = done
-	if done == 0 {
-		return
-	}
-	msg := "Goal complete: " + sim.Goals[done-1].Name + "!"
-	if done < len(sim.Goals) {
-		msg += " Next: " + sim.Goals[done].Name
-	} else {
-		msg += " Every goal done. The planet is alive"
-	}
-	g.showMessage(msg, msgGood)
-}
-
 // handleKeys provides desktop shortcuts for the on-screen buttons.
 func (g *Game) handleKeys() {
 	landed := g.planet.Landed()
@@ -309,6 +291,7 @@ func (g *Game) handleKeys() {
 		g.linkFrom = nil
 		g.selected = nil
 		g.pending = nil
+		g.goalsOpen = false
 	case inpututil.IsKeyJustPressed(ebiten.KeyV):
 		g.view = (g.view + 1) % numViews
 		g.atlasDirty = true

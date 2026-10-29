@@ -81,6 +81,7 @@ func (g *Game) setTool(t tool) {
 	g.linkFrom = nil
 	g.pending = nil
 	g.linkDrag = nil
+	g.goalsOpen = false
 }
 
 // Layout sizes in dp.
@@ -119,6 +120,9 @@ func (g *Game) runUI(u *ui) {
 		y = g.modeBanner(u, left, narrow, y+gap)
 	} else {
 		y = g.goalCard(u, left, narrow, y+gap)
+		if !g.inspectOpen() && !g.goalsOpen && !g.menuOpen {
+			y = g.alertRows(u, left, narrow, y)
+		}
 	}
 	planetTop := y + gap
 	planetBottom := bottom
@@ -131,6 +135,8 @@ func (g *Game) runUI(u *ui) {
 		u.text(msg, left+(narrow-left-u.textW(msg, sans, 14, semibold))/2, bottom-h/2-u.lineH(sans, 14, semibold)/2, sans, 14, semibold, colText)
 		planetBottom = bottom - h - gap
 		g.toast(u, left, narrow, planetBottom)
+	case g.goalsOpen:
+		planetBottom = g.goalsSheet(u, sl, math.Min(W-sr, sl+520), H) - gap
 	case g.inspectOpen():
 		planetBottom = g.inspectSheet(u, sl, math.Min(W-sr, sl+520), H) - gap
 	case placing && g.pending != nil:
@@ -147,8 +153,13 @@ func (g *Game) runUI(u *ui) {
 		}
 		speedTop := above - 44
 		g.speedControl(u, left, speedTop)
-		g.toast(u, left+3*44+16, narrow, above)
 		planetBottom = speedTop - gap
+		if g.msgAction != nil && g.ticks < g.msgUntil {
+			// Messages with a button get a full-width row of their own.
+			planetBottom = g.toast(u, left, narrow, planetBottom) - gap
+		} else {
+			g.toast(u, left+3*44+16, narrow, above)
+		}
 		g.viewRail(u, right, planetTop, planetBottom)
 	}
 	g.linkBubble(u, left, right)
@@ -279,7 +290,7 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 	n := p.GoalsDone() + 1
 	toggle := func() { g.goalCollapsed = !g.goalCollapsed }
 
-	if g.goalCollapsed || g.inspectOpen() || g.menuOpen {
+	if g.goalCollapsed || g.inspectOpen() || g.menuOpen || g.goalsOpen {
 		h := 44.0
 		u.panel(left, y, w, h, 14, colChip, colBorder)
 		label := "All goals complete"
@@ -291,7 +302,8 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 			u.textRight(fmt.Sprintf("%.0f%%", prog*100), right-40, y+(h-u.lineH(mono, 13, semibold))/2, mono, 13, semibold, colTeal)
 		}
 		u.icon(iconChevronDown, right-34, y+11, 22, colMuted)
-		u.area(left, y, w, h, toggle)
+		u.area(left, y, w-48, h, g.openGoals)
+		u.area(right-48, y, 48, h, toggle)
 		return y + h
 	}
 
@@ -300,6 +312,7 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 	h := g.goalCardBody(u, left+pad, y+12, inner, goal, prog, ok, n, true) + 24
 	u.panel(left, y, w, h, 16, colChip, colBorder)
 	g.goalCardBody(u, left+pad, y+12, inner, goal, prog, ok, n, false)
+	u.area(left, y, w, h, g.openGoals)
 	u.area(right-48, y, 48, 44, toggle)
 	return y + h
 }
@@ -392,10 +405,11 @@ func (g *Game) speedControl(u *ui, x, y float64) {
 	}
 }
 
-// toast draws the current message, if any, in the space ending at bottom.
-func (g *Game) toast(u *ui, left, right, bottom float64) {
+// toast draws the current message, if any, in the space ending at bottom,
+// and returns its top (bottom if there's no message).
+func (g *Game) toast(u *ui, left, right, bottom float64) float64 {
 	if g.ticks >= g.msgUntil || g.message == "" {
-		return
+		return bottom
 	}
 	fill, border, fg, ic := color.Color(colChip), color.Color(colBorder), color.Color(colText), iconInspect
 	switch g.msgKind {
@@ -436,6 +450,7 @@ func (g *Game) toast(u *ui, left, right, bottom float64) {
 	for i, line := range lines {
 		u.text(line, left+38, y+10+float64(i)*lh, sans, 13, regular, fg)
 	}
+	return y
 }
 
 func (g *Game) viewRail(u *ui, right, top, bottom float64) {

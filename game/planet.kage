@@ -179,14 +179,12 @@ func latticeDir(dm float, ij vec2) vec3 {
 // tileLocal returns where planet-space direction d falls relative to the
 // centre of the tile at lattice point ij of diamond dm, measured on the plane
 // touching the sphere at the tile centre, oriented north-up, in units of the
-// distance between tile centres. Building symbols are drawn in it.
+// average distance between tile centres. Building symbols are drawn in it.
 func tileLocal(d vec3, dm float, ij vec2) vec2 {
 	c := latticeDir(dm, ij)
-	step := vec2(1, 0)
-	if ij.x >= N {
-		step = vec2(-1, 0)
-	}
-	size := length(latticeDir(dm, ij+step) - c)
+	// Measured against the average spacing, not this tile's neighbours, so a
+	// tile drawn from two diamonds comes out the same size from each.
+	size := TileAngle
 	up := vec3(0, 1, 0)
 	if abs(c.y) > 0.99 {
 		up = vec3(0, 0, 1)

@@ -6,15 +6,12 @@ import (
 )
 
 func TestSaveLoadRoundTrip(t *testing.T) {
-	p, lander, ore := economyPlanet(t)
+	p, _, ore := economyPlanet(t)
 	smelterCell := Cell{Diamond: 4, I: 8, J: 10}
 	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 	mustBuild(t, p, Mine, ore)
 	mustBuild(t, p, Smelter, smelterCell)
 	mustBuild(t, p, HeaterMachine, heaterCell)
-	mustLink(t, p, lander, ore)
-	mustLink(t, p, lander, smelterCell)
-	mustLink(t, p, lander, heaterCell)
 	for range 300 {
 		p.Step()
 	}
@@ -41,8 +38,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if p.Stores() != q.Stores() || p.Air != q.Air || p.Ticks != q.Ticks || p.GoalsDone() != q.GoalsDone() {
 		t.Fatal("planet state differs after loading")
 	}
-	if len(p.Buildings()) != len(q.Buildings()) || len(p.Links()) != len(q.Links()) {
-		t.Fatal("buildings or links differ after loading")
+	if len(p.Buildings()) != len(q.Buildings()) || len(p.Spokes()) != len(q.Spokes()) {
+		t.Fatal("buildings or connections differ after loading")
 	}
 }
 

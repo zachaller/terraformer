@@ -5,8 +5,6 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/zachaller/terraformer/sim"
 )
 
@@ -30,50 +28,43 @@ func (g *Game) confirmPlacement() {
 	}
 	c := *g.pending
 	p := g.planet
-	target, linkable, covered := p.AutoLink(bt, c)
 	if _, err := p.Build(bt, c); err != nil {
 		g.showMessage(err.Error(), msgWarn)
 		return
 	}
 	g.pending = nil
 	g.atlasDirty = true
+	b := p.BuildingAt(c)
 	switch {
-	case covered:
-		g.showMessage(fmt.Sprintf("Built a %s, connected by a pylon", bt), msgGood)
-	case linkable && p.Link(c, target) == nil:
-		g.showMessage(fmt.Sprintf("Built a %s and linked it to the %s", bt, lower(p.BuildingAt(target).Spec().Name)), msgGood)
-	default:
-		g.showMessageAction(fmt.Sprintf("Built a %s, but it isn't linked to anything", bt), msgWarn, "Link it", func() {
-			g.setTool(toolLink)
-			g.linkFrom = &c
-			g.showMessage("Drag from the new building to another, or tap the one to link it to", msgInfo)
+	case p.NetworkOf(b).HasDepot:
+		g.showMessage(fmt.Sprintf("Built a %s, connected to the colony", lower(bt.String())), msgGood)
+	case len(p.NetworkOf(b).Members) > 1:
+		g.showMessage(fmt.Sprintf("Built a %s. Its network doesn't reach the colony", lower(bt.String())), msgInfo)
+	case b.Spec().PowerIn > 0:
+		g.showMessageAction(fmt.Sprintf("Built a %s, but nothing connects it", lower(bt.String())), msgWarn, "Add a pylon", func() {
+			g.setTool(buildTool(sim.Pylon))
+			g.showMessage("Tap a tile within 4 tiles of it to place a pylon", msgInfo)
 		})
+	default:
+		g.showMessage(fmt.Sprintf("Built a %s", lower(bt.String())), msgGood)
 	}
 }
 
-// connectionRow describes how a building placed on c would join the
-// colony, for the placement preview, and the extra metal its link costs.
-func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) (previewRow, float64) {
+// connectionRow describes how a building placed on c would join a network,
+// for the placement preview.
+func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) previewRow {
 	p := g.planet
-	target, ok, covered := p.AutoLink(bt, c)
+	via, ok, colony := p.Connection(bt, c)
 	switch {
-	case covered:
-		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "through a pylon · free", colTeal}, 0
+	case ok && colony:
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to the colony via the " + lower(p.BuildingAt(via).Spec().Name), colTeal}
 	case ok:
-		cost := p.LinkCost(c, target)
-		where := lower(p.BuildingAt(target).Spec().Name)
-		col := color.Color(colText)
-		if !p.NetworkOf(p.BuildingAt(target)).HasDepot {
-			where += " (not the colony)"
-			col = colAmber
-		}
-		return previewRow{iconLink, rgba(0x5AD1F5), "Links to", fmt.Sprintf("%s · %.1f metal", where, cost), col}, cost
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to a network that doesn't reach the colony", colAmber}
 	}
-	need := "nothing in reach"
-	if sim.Specs[bt].PowerIn > 0 {
-		need = "nothing in reach: needs its own power"
+	if bt == sim.Pylon {
+		return previewRow{iconLink, colAmber, "Connects", "to nothing yet: no hub within 10 tiles", colAmber}
 	}
-	return previewRow{iconLink, colAmber, "Links to", need, colAmber}, 0
+	return previewRow{iconLink, colAmber, "Connects", "to nothing: needs a pylon within 4 tiles", colAmber}
 }
 
 // maxAreaCells is the most tiles a placement preview tints: four rings of
@@ -190,10 +181,6 @@ func (g *Game) modeBanner(u *ui, left, right, y float64) float64 {
 			sub = "Tap another tile to move it, or Build here"
 		}
 		cost = fmt.Sprintf("%.0f metal", sim.Specs[bt].Cost)
-	} else {
-		u.icon(iconLink, left+16, y+18, 24, rgba(0x5AD1F5))
-		title = "Linking"
-		sub = "Drag from one building to another"
 	}
 	u.text(title, left+54, y+11, sans, 14, semibold, colText)
 	u.text(sub, left+54, y+32, sans, 12, regular, colBody)
@@ -242,7 +229,7 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 	case sim.Smelter:
 		warning = "Smelters pollute up to 2 tiles around. Keep them away from heated ground."
 	case sim.SolarPanel, sim.Geothermal:
-		rows = append(rows, previewRow{iconBolt, colAmber, "Makes", fmt.Sprintf("%.0f power once linked", spec.PowerOut), colText})
+		rows = append(rows, previewRow{iconBolt, colAmber, "Makes", fmt.Sprintf("%.0f power once connected", spec.PowerOut), colText})
 		if bt == sim.Geothermal && !t.Volcanic {
 			warning = "Geothermal plants need a volcanic tile (red in the Industry view)."
 		}
@@ -281,7 +268,7 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		rows = append(rows, previewRow{iconLeaf, colTeal, "Seeds life", fmt.Sprintf("up to %d tiles around", spec.SeedRings), colText})
 	case sim.Pylon:
 		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Connects", fmt.Sprintf("everything within %.0f tiles", spec.CoverRadius), colText})
-		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Links reach", fmt.Sprintf("%.0f tiles", spec.LinkReach), colText})
+		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Joins", fmt.Sprintf("pylons and the lander within %.0f tiles", spec.Reach), colText})
 	case sim.CarbonScrubber:
 		rows = append(rows, previewRow{iconAir, colCO2, "Removes", fmt.Sprintf("%.2f kPa a year of CO2", -spec.Emits.CO2*3650), colText})
 	case sim.Comet:
@@ -290,8 +277,7 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		warning = "The impact destroys everything within two tiles and leaves a crater."
 	}
 	if bt != sim.Comet && bt != sim.OrbitalMirror {
-		row, _ := g.connectionRow(bt, c)
-		rows = append(rows, row)
+		rows = append(rows, g.connectionRow(bt, c))
 	}
 	if spec.PowerIn > 0 && p.Landed() {
 		n := p.NetworkOf(p.Buildings()[0])
@@ -319,11 +305,7 @@ func (g *Game) placementPanel(u *ui, left, right, bottom float64) float64 {
 	u.icon(iconCross, left+20, by+20, 24, colIcon)
 	u.area(left, by, 64, barH, func() { g.pending = nil })
 	bx, bw := left+64+gap, right-left-64-gap
-	_, linkCost := g.connectionRow(bt, c)
-	label := fmt.Sprintf("Build here · %.1f metal", sim.Specs[bt].Cost+linkCost)
-	if linkCost == 0 {
-		label = fmt.Sprintf("Build here · %.0f metal", sim.Specs[bt].Cost)
-	}
+	label := fmt.Sprintf("Build here · %.0f metal", sim.Specs[bt].Cost)
 	fill, fg := color.Color(colAmber), color.Color(colOnAmber)
 	if err != nil {
 		fill, fg = colCard, colMuted
@@ -372,132 +354,4 @@ func (g *Game) placementPanel(u *ui, left, right, bottom float64) float64 {
 		u.paragraph(note, x+38, y+10, inner-50, 12, noteFg)
 	}
 	return top
-}
-
-// linkDrag is a link being made by dragging from a building.
-type linkDrag struct {
-	from sim.Cell
-	x, y float64 // finger position, screen pixels
-}
-
-// linkTarget is the building under the finger during a link drag, if any.
-func (g *Game) linkTarget() (sim.Cell, bool) {
-	c, ok := g.cam.pick(g.planet.Grid, g.linkDrag.x, g.linkDrag.y)
-	if !ok || g.planet.BuildingAt(c) == nil || c == g.linkDrag.from {
-		return sim.Cell{}, false
-	}
-	return c, true
-}
-
-// finishLinkDrag links the drag's building to the one it was released on.
-func (g *Game) finishLinkDrag() {
-	d := g.linkDrag
-	g.linkDrag = nil
-	target, ok := g.cam.pick(g.planet.Grid, d.x, d.y)
-	if !ok || g.planet.BuildingAt(target) == nil {
-		g.showMessage("Let go over a building to link to it", msgInfo)
-		return
-	}
-	if target == d.from {
-		return
-	}
-	cost := g.planet.LinkCost(d.from, target)
-	if err := g.planet.Link(d.from, target); err != nil {
-		g.showMessage(err.Error(), msgWarn)
-		return
-	}
-	g.linkFrom = nil
-	g.showMessage(fmt.Sprintf("Linked for %.1f metal", cost), msgGood)
-}
-
-var (
-	colReach   = rgba(0x5AD1F5)
-	colPreview = rgba(0xFFE08A)
-)
-
-// drawLinkPreview draws the link being dragged: the source's reach, and a
-// dashed line from it to the finger.
-func (g *Game) drawLinkPreview(screen *ebiten.Image) {
-	d := g.linkDrag
-	if d == nil {
-		return
-	}
-	p := g.planet
-	s := ebiten.Monitor().DeviceScaleFactor()
-	a := p.Dir(d.from)
-
-	// Reach: a dashed circle MaxLinkLength tiles around the source.
-	reach := sim.LinkReach(p.BuildingAt(d.from).Type) * p.Grid.TileAngle()
-	ref := sim.Vec3{Y: 1}
-	if math.Abs(a.Y) > 0.9 {
-		ref = sim.Vec3{X: 1}
-	}
-	e1 := a.Cross(ref).Normalize()
-	e2 := a.Cross(e1)
-	const n = 72
-	for i := 0; i < n; i += 2 {
-		pt := func(k int) sim.Vec3 {
-			th := 2 * math.Pi * float64(k) / n
-			return a.Scale(math.Cos(reach)).Add(e1.Scale(math.Cos(th) * math.Sin(reach))).Add(e2.Scale(math.Sin(th) * math.Sin(reach)))
-		}
-		x0, y0, v0 := g.cam.project(pt(i))
-		x1, y1, v1 := g.cam.project(pt(i + 1))
-		if v0 && v1 {
-			vector.StrokeLine(screen, f32(x0), f32(y0), f32(x1), f32(y1), f32(2*s), withAlpha(colReach, 200), true)
-		}
-	}
-
-	// Dashed line to the finger, along the surface when it's over the planet.
-	clr := colPreview
-	if t, ok := g.linkTarget(); ok && p.CanLink(d.from, t) != nil {
-		clr = colRed
-	}
-	sx, sy, _ := g.cam.project(a)
-	b, onPlanet := g.cam.pickDir(d.x, d.y)
-	const segs = 24
-	px, py := sx, sy
-	for i := 1; i <= segs; i++ {
-		t := float64(i) / segs
-		var x, y float64
-		if onPlanet {
-			x, y, _ = g.cam.project(a.Scale(1 - t).Add(b.Scale(t)).Normalize())
-		} else {
-			x, y = sx+(d.x-sx)*t, sy+(d.y-sy)*t
-		}
-		if i%2 == 1 {
-			vector.StrokeLine(screen, f32(px), f32(py), f32(x), f32(y), f32(3.5*s), clr, true)
-		}
-		px, py = x, y
-	}
-	vector.StrokeCircle(screen, f32(sx), f32(sy), f32(14*s), f32(3*s), colReach, true)
-}
-
-// linkBubble shows what releasing the drag here would do, next to the finger.
-func (g *Game) linkBubble(u *ui, minX, maxX float64) {
-	d := g.linkDrag
-	if d == nil {
-		return
-	}
-	p := g.planet
-	title, sub := "Drag to a building", fmt.Sprintf("Links reach %d tiles", sim.MaxLinkLength)
-	subCol, border := color.Color(colMuted), color.Color(rgba(0x2B374A))
-	if t, ok := g.linkTarget(); ok {
-		title = "Link to " + p.BuildingAt(t).Spec().Name
-		if err := p.CanLink(d.from, t); err != nil {
-			sub, subCol, border = err.Error(), colRed, colRed
-		} else {
-			sub = fmt.Sprintf("%.0f tiles · %.1f metal", math.Ceil(p.LinkLength(d.from, t)), p.LinkCost(d.from, t))
-			subCol, border = colPreview, colPreview
-		}
-	}
-	w := math.Max(u.textW(title, sans, 13, semibold), u.textW(sub, mono, 12, semibold)) + 24
-	h := 50.0
-	x := math.Min(math.Max(d.x/u.s-w/2, minX), maxX-w)
-	y := d.y/u.s - 64 - h
-	if y < 0 {
-		y = d.y/u.s + 40
-	}
-	u.panel(x, y, w, h, 12, colSheet, border)
-	u.text(title, x+12, y+8, sans, 13, semibold, colText)
-	u.text(sub, x+12, y+28, mono, 12, semibold, subCol)
 }

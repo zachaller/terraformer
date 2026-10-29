@@ -24,7 +24,6 @@ type savedPlanet struct {
 	Ticks     uint64
 	GoalsDone int
 	Buildings []savedBuilding
-	Links     [][2]int
 	Stores    Amounts
 	Produced  Amounts
 }
@@ -48,7 +47,6 @@ func (p *Planet) Save(w io.Writer) error {
 		Impacts:   p.impacts,
 		Ticks:     p.Ticks,
 		GoalsDone: p.goalsDone,
-		Links:     p.Links(),
 		Stores:    p.eco.Stores,
 		Produced:  p.eco.Produced,
 	}
@@ -92,12 +90,6 @@ func Load(r io.Reader) (*Planet, error) {
 		}
 		b := p.place(sb.Type, sb.Tile)
 		b.In, b.Out, b.Timer = sb.In, sb.Out, sb.Timer
-	}
-	for _, l := range s.Links {
-		if p.eco.at[l[0]] == nil || p.eco.at[l[1]] == nil {
-			return nil, fmt.Errorf("save has a link between missing buildings: %v", l)
-		}
-		p.eco.links[linkKey(l[0], l[1])] = struct{}{}
 	}
 	return p, nil
 }

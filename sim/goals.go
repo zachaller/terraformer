@@ -21,7 +21,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Dig for ore",
-		Hint: "Build > Industry > Mine: build it on iron ore (gold in the Industry view) within 8 tiles of the lander, and it links itself",
+		Hint: "Build > Industry > Mine: build it on iron ore (gold in the Industry view) within 4 tiles of the lander, which connects it (or put a Pylon near it)",
 		Progress: func(p *Planet) float64 {
 			return boolProgress(p.anyRunning(Mine, true, 0.01))
 		},
@@ -198,7 +198,8 @@ func boolProgress(b bool) float64 {
 }
 
 // anyRunning reports whether a building of type t runs at activity of at
-// least minActivity, optionally only counting networks linked to the lander.
+// least minActivity, optionally only counting networks that include the
+// lander.
 func (p *Planet) anyRunning(t BuildingType, needDepot bool, minActivity float64) bool {
 	for _, b := range p.eco.buildings {
 		if b.Type == t && b.Activity >= minActivity && (!needDepot || p.NetworkOf(b).HasDepot) {

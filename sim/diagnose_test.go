@@ -3,21 +3,21 @@ package sim
 import "testing"
 
 func TestDiagnose(t *testing.T) {
-	p, lander, ore := economyPlanet(t)
+	p, _, ore := economyPlanet(t)
 	smelterCell := Cell{Diamond: 4, I: 8, J: 10}
 	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 
-	// Unlinked heater: no power.
-	heater := mustBuild(t, p, HeaterMachine, heaterCell)
+	// A heater far from any hub: no power.
+	lone := mustBuild(t, p, HeaterMachine, remote(p))
 	p.Step()
-	if got := p.Diagnose(heater).Kind; got != StatusNoPower {
-		t.Fatalf("unlinked heater: %v, want NoPower", got)
+	if got := p.Diagnose(lone).Kind; got != StatusNoPower {
+		t.Fatalf("unconnected heater: %v, want NoPower", got)
 	}
 
-	// Linked with a mine: 3 supply, 4 demand.
+	// Next to the lander, with a mine: 3 supply, 4 demand.
+	p.eco.Stores[Metal] += 20
+	heater := mustBuild(t, p, HeaterMachine, heaterCell)
 	mine := mustBuild(t, p, Mine, ore)
-	mustLink(t, p, lander, heaterCell)
-	mustLink(t, p, lander, ore)
 	p.Step()
 	st := p.Diagnose(heater)
 	if st.Kind != StatusLowPower || st.Supply != 3 || st.Demand != 4 {
@@ -32,13 +32,12 @@ func TestDiagnose(t *testing.T) {
 	p.eco.Stores[Metal] += 50
 	p.eco.Stores[Ore] = 0
 	smelter := mustBuild(t, p, Smelter, smelterCell)
-	mustLink(t, p, lander, smelterCell)
 	p.Step()
 	if st := p.Diagnose(smelter); st.Kind != StatusNoInput || st.Resource != Ore {
 		t.Fatalf("starved smelter: %+v, want NoInput Ore", st)
 	}
 
-	// Unlinked mine on an exhausted deposit: depleted.
+	// A mine on an exhausted deposit: depleted.
 	_ = mine
 	mine2 := mustBuild(t, p, Mine, ore)
 	p.Tiles[p.Grid.Index(ore)].Ore = 0
@@ -49,11 +48,12 @@ func TestDiagnose(t *testing.T) {
 }
 
 func TestDiagnoseOutputFull(t *testing.T) {
-	p, _, ore := economyPlanet(t)
-	solarCell := Cell{Diamond: 4, I: 10, J: 10}
+	p, _, _ := economyPlanet(t)
+	p.eco.Stores[Metal] = 1000
+	ore := remote(p)
 	mine := mustBuild(t, p, Mine, ore)
-	mustBuild(t, p, SolarPanel, solarCell)
-	mustLink(t, p, ore, solarCell)
+	mustBuild(t, p, SolarPanel, near(ore, 1))
+	mustBuild(t, p, Pylon, near(ore, -1))
 	for range 100 {
 		p.Step()
 	}
@@ -65,10 +65,9 @@ func TestDiagnoseOutputFull(t *testing.T) {
 func TestDiagnoseRunning(t *testing.T) {
 	p, lander, ore := economyPlanet(t)
 	mine := mustBuild(t, p, Mine, ore)
-	mustLink(t, p, lander, ore)
 	p.Step()
 	if got := p.Diagnose(mine).Kind; got != StatusRunning {
-		t.Fatalf("powered mine linked to lander: %v, want Running", got)
+		t.Fatalf("powered mine next to the lander: %v, want Running", got)
 	}
 	if got := p.Diagnose(p.BuildingAt(lander)).Kind; got != StatusRunning {
 		t.Fatalf("lander: %v, want Running", got)

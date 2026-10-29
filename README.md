@@ -19,7 +19,7 @@ shape a barren planet until life takes hold. See
   ray-traces the sphere and looks each pixel up in a tile atlas. Tile colours
   are blended smoothly and broken up with noise, so the planet looks natural
   rather than like a ball of hexagons; a tile grid appears only around the
-  tapped tile while a build, link or demolish tool is active.
+  tapped tile while a build or demolish tool is active.
 - A climate and atmosphere simulation built on real terraforming ideas
   (mostly the ones proposed for Mars), with timescales compressed so a planet
   takes hours rather than centuries:
@@ -45,7 +45,8 @@ shape a barren planet until life takes hold. See
     once there's enough oxygen. Plants turn CO₂ into oxygen, and seas (and,
     late on, carbon scrubbers) lock CO₂ away, so late in the game the planet
     needs greenhouse gases to stay warm as CO₂ falls.
-- A colony economy: choose a landing site, then build and link machines.
+- A colony economy: choose a landing site, then build machines, connected by
+  pylons.
   Deposits of iron, fluorite and nitrate, and volcanic tiles, are scattered
   over the planet; buildings unlock as goals are completed.
 - 24 goals that guide you from landing to air people could breathe, shown at
@@ -62,8 +63,8 @@ shape a barren planet until life takes hold. See
   Sora and JetBrains Mono fonts (embedded; see `game/fonts/`), status chips,
   a goal card and goals list, alerts, a tool dock, a map-view rail, messages,
   an inspect panel (including what lives on a tile and what the next stage
-  needs), placement previews and drag-to-link. Buildings are drawn in the
-  shader with status badges (bolt: short of power; broken link: no power;
+  needs) and placement previews. Buildings are drawn in the shader with
+  status badges (bolt: short of power; broken link: not connected;
   !: blocked; -: deposit empty).
 - Automatic saving every 30 seconds, when the app goes into the background,
   and when the desktop window closes. **Tool → New planet** (tap twice)
@@ -73,7 +74,7 @@ shape a barren planet until life takes hold. See
 |---|---|---|---|
 | Lander | free, placed first | | Holds the colony stores; makes 3 power |
 | Solar | 4 | | Makes 2 power |
-| Pylon | 3 | | Connects every building within 4 tiles into its network without links; its links reach 12 tiles |
+| Pylon | 3 | | A hub: connects every building within 4 tiles, and other pylons (and the lander) within 10 |
 | Wind turbine | 10 | Thicken the air | Up to 6 power, from 2 kPa, full at 40 kPa |
 | Geothermal | 18 | First life | 10 power on a volcanic tile; warms it |
 | Mine | 6 | | Digs a deposit: iron ore, fluorite or nitrate; 1 power; pollutes |
@@ -90,15 +91,16 @@ shape a barren planet until life takes hold. See
 | Biolab | 30 | First life | Life takes hold far faster up to 3 tiles around; 3 power |
 | Comet | 120 | Thaw | Strikes 30 days after it's aimed: water, nitrogen and CO₂, a crater, and destruction 2 tiles around; one at a time |
 
-Links connect buildings into networks. A new building links itself to the
-nearest building in reach (preferring the lander's network); the placement
-preview shows the link and its cost, or that a pylon connects it for free. A network shares its power (short of
-power, everything in it slows down and its links turn orange) and moves ore
-and metal between buildings. Networks linked to the lander send surplus into
-the colony stores, which pay for construction, and feed machines from them.
-Links reach 8 tiles and cost 0.5 metal per tile. Buildings that don't need
-the stores can run on their own small network (a dust spreader on a polar cap
-with a solar panel beside it, say). Pollution from mines, smelters and
+Buildings join networks through hubs: the lander and pylons each connect
+every building within 4 tiles, and hubs within 10 tiles of each other
+connect, so a chain of pylons carries the colony's network across the
+planet. There are no manual links. A network shares its power (short of
+power, everything in it slows down and its lines turn orange) and moves
+resources between buildings. Networks that include the lander send surplus
+into the colony stores, which pay for construction, and feed machines from
+them. A network doesn't have to reach the colony: a pylon, a dust spreader
+and a solar panel make a working outpost on a polar cap. Pollution from
+mines, smelters and
 factories stops life growing nearby, so where you put industry matters.
 Buildings that are idle (unpowered, out of input, or with a full output
 buffer) pulse red.
@@ -118,14 +120,13 @@ live there and what's stopping them, and the building's network.
 | Use the current tool on a tile | Tap | Click |
 | Build menu (by category: Power, Industry, Climate, Air, Projects; and new planet) | **Build** | `B`, or `1`–`4` for Solar, Mine, Smelter, Heater |
 | Place a building: tap a tile to preview it (heat or pollution area, effects, warnings), tap another to move it, then **Build here** | Tap, then **Build here** | Click, then `Enter` |
-| Link buildings by hand (new buildings link themselves): drag from one to another (shows reach and cost); or tap one, then the other | **Link**, then drag | `L`, then drag |
 | Inspect a tile or building | **Inspect** | `I` |
 | Remove a building (half its metal back) | **Remove** | `X` |
 | Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |
 | Speed (Paused / 1× / 4× / 16×) | Speed pill | `Space` pause, `F` fastest |
 | Atmosphere details | Tap the kPa chip | |
 | Collapse the goal card | Tap it | `G` |
-| Close panels, cancel a link or placement | Close button | `Esc` |
+| Close panels, cancel a placement | Close button | `Esc` |
 
 ## Running on desktop
 

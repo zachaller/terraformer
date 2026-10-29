@@ -209,10 +209,10 @@ const (
 	// soilRate is how fast life builds soil, per step at full cover.
 	soilRate = 0.0001
 	// photoK is the O₂ (kPa) one tile of full forest makes from CO₂ per step.
-	photoK = 1.5e-8
+	photoK = 0.8e-8
 	// carbonateK is the CO₂ (kPa) one tile of standing water locks into
 	// carbonate rock per step, when CO₂ is plentiful.
-	carbonateK = 3e-7
+	carbonateK = 1.6e-7
 )
 
 // stepBiosphere lets life build soil, turns CO₂ into O₂ by photosynthesis,

@@ -28,7 +28,7 @@ type Building struct {
 
 func (b *Building) Spec() *BuildingSpec { return &Specs[b.Type] }
 
-// Network is a set of buildings joined by links. Buildings in a network share
+// Network is a set of buildings connected through hubs. Buildings in a network share
 // power, and resources flow freely between them.
 type Network struct {
 	Members     []*Building // in tile order, for determinism
@@ -45,16 +45,17 @@ func (n *Network) PowerSatisfaction() float64 {
 	return min(n.PowerSupply/n.PowerDemand, 1)
 }
 
-// economy is the colony's buildings, links and stores.
+// economy is the colony's buildings and stores.
 type economy struct {
 	Stores    Amounts
-	Produced  Amounts             // total ever produced, for goals
-	Emitted   Air                 // total gas ever released by machines
-	buildings []*Building         // in construction order
-	at        map[int]*Building   // by tile index
-	links     map[[2]int]struct{} // tile index pairs, lower index first
-	networks  []*Network
-	dirty     bool // networks need recomputing
+	Produced  Amounts           // total ever produced, for goals
+	Emitted   Air               // total gas ever released by machines
+	buildings []*Building       // in construction order
+	at        map[int]*Building // by tile index
+	// hubLinks and spokes are the connections hubs make (see HubLinks).
+	hubLinks, spokes [][2]int
+	networks         []*Network
+	dirty            bool // networks need recomputing
 	// machineHeat is this step's heating from machines, per tile, and
 	// seeded marks tiles near a running biolab.
 	machineHeat []float64
@@ -64,7 +65,6 @@ type economy struct {
 func newEconomy(cells int) economy {
 	return economy{
 		at:          map[int]*Building{},
-		links:       map[[2]int]struct{}{},
 		machineHeat: make([]float64, cells),
 		seeded:      make([]bool, cells),
 	}
@@ -75,21 +75,6 @@ func (p *Planet) Buildings() []*Building { return p.eco.buildings }
 
 // BuildingAt returns the building on c, or nil.
 func (p *Planet) BuildingAt(c Cell) *Building { return p.eco.at[p.Grid.Index(c)] }
-
-// Links returns every link as a pair of tile indices, in a stable order.
-func (p *Planet) Links() [][2]int {
-	out := make([][2]int, 0, len(p.eco.links))
-	for l := range p.eco.links {
-		out = append(out, l)
-	}
-	slices.SortFunc(out, func(a, b [2]int) int {
-		if a[0] != b[0] {
-			return a[0] - b[0]
-		}
-		return a[1] - b[1]
-	})
-	return out
-}
 
 // NetworkOf returns the network b belongs to.
 func (p *Planet) NetworkOf(b *Building) *Network {
@@ -116,9 +101,6 @@ var (
 	ErrNoIce         = errors.New("Ice drills must go on ice")
 	ErrNotVolcanic   = errors.New("Geothermal plants must go on a volcanic tile")
 	ErrUnique        = errors.New("You can only have one of those")
-	ErrNoBuilding    = errors.New("Links connect two buildings")
-	ErrSameBuilding  = errors.New("Pick a different building to link to")
-	ErrAlreadyLinked = errors.New("Those buildings are already linked")
 	ErrLander        = errors.New("The lander can't be demolished")
 )
 
@@ -179,7 +161,7 @@ func (p *Planet) nearestBuilding(idx int) float64 {
 	d := math.Inf(1)
 	c := p.Grid.CellAt(idx)
 	for _, b := range p.eco.buildings {
-		d = min(d, p.LinkLength(c, p.Grid.CellAt(b.Tile)))
+		d = min(d, p.Distance(c, p.Grid.CellAt(b.Tile)))
 	}
 	return d
 }
@@ -201,7 +183,7 @@ func (p *Planet) place(t BuildingType, idx int) *Building {
 	return b
 }
 
-// Demolish removes the building on c and its links, refunding part of its cost.
+// Demolish removes the building on c, refunding part of its cost.
 func (p *Planet) Demolish(c Cell) error {
 	idx := p.Grid.Index(c)
 	b := p.eco.at[idx]
@@ -216,138 +198,73 @@ func (p *Planet) Demolish(c Cell) error {
 	return nil
 }
 
-// remove takes building b and its links off the planet.
+// remove takes building b off the planet.
 func (p *Planet) remove(b *Building) {
-	idx := b.Tile
-	delete(p.eco.at, idx)
+	delete(p.eco.at, b.Tile)
 	p.eco.buildings = slices.DeleteFunc(p.eco.buildings, func(x *Building) bool { return x == b })
-	for l := range p.eco.links {
-		if l[0] == idx || l[1] == idx {
-			delete(p.eco.links, l)
-		}
-	}
 	p.eco.dirty = true
 }
 
-// LinkLength is the distance between the centres of tiles a and b, in tile
+// Distance is the distance between the centres of tiles a and b, in tile
 // widths.
-func (p *Planet) LinkLength(a, b Cell) float64 {
+func (p *Planet) Distance(a, b Cell) float64 {
 	da, db := p.Dir(a), p.Dir(b)
 	angle := math.Acos(min(da.Dot(db), 1))
 	return angle / p.Grid.TileAngle()
 }
 
-// LinkCost is the metal a link between a and b costs.
-func (p *Planet) LinkCost(a, b Cell) float64 {
-	return math.Ceil(p.LinkLength(a, b)) * linkCostPerTile
+// Buildings join networks without links: hubs (the lander and pylons)
+// connect every building within their CoverRadius, and each other within
+// their Reach.
+
+// isHub reports whether buildings of type t are network hubs.
+func isHub(t BuildingType) bool { return Specs[t].Reach > 0 }
+
+// joins reports whether hub h connects a building of type t on tile idx.
+func (p *Planet) joins(h *Building, t BuildingType, idx int) bool {
+	if h.Tile == idx {
+		return false
+	}
+	d := p.Distance(p.Grid.CellAt(h.Tile), p.Grid.CellAt(idx))
+	if isHub(t) {
+		return d <= max(h.Spec().Reach, Specs[t].Reach)
+	}
+	return d <= h.Spec().CoverRadius
 }
 
-// CanLink reports why buildings on a and b can't be linked, or nil if they can.
-func (p *Planet) CanLink(a, b Cell) error {
-	ia, ib := p.Grid.Index(a), p.Grid.Index(b)
-	switch {
-	case p.eco.at[ia] == nil || p.eco.at[ib] == nil:
-		return ErrNoBuilding
-	case ia == ib:
-		return ErrSameBuilding
-	}
-	if _, ok := p.eco.links[linkKey(ia, ib)]; ok {
-		return ErrAlreadyLinked
-	}
-	if l, reach := p.LinkLength(a, b), max(linkReach(p.eco.at[ia]), linkReach(p.eco.at[ib])); l > reach {
-		return fmt.Errorf("Too far: %.0f tiles (links reach %.0f)", l, reach)
-	}
-	if cost := p.LinkCost(a, b); p.eco.Stores[Metal] < cost {
-		return fmt.Errorf("Link needs %.1f metal; the stores have %.1f", cost, p.eco.Stores[Metal])
-	}
-	return nil
-}
+// HubLinks returns the connections between hubs, and Spokes those from
+// hubs to the other buildings they connect, as pairs of tile indices (hub
+// first).
+func (p *Planet) HubLinks() [][2]int { p.updateNetworks(); return p.eco.hubLinks }
+func (p *Planet) Spokes() [][2]int   { p.updateNetworks(); return p.eco.spokes }
 
-// linkReach is how far links from b can reach, in tiles.
-func linkReach(b *Building) float64 { return LinkReach(b.Type) }
-
-// LinkReach is how far links from a building of type t can reach, in tiles.
-func LinkReach(t BuildingType) float64 { return max(Specs[t].LinkReach, MaxLinkLength) }
-
-// Covers reports whether building b connects a building on tile idx
-// without a link, being a pylon close enough.
-func (p *Planet) covers(b *Building, idx int) bool {
-	r := b.Spec().CoverRadius
-	return r > 0 && b.Tile != idx && p.LinkLength(p.Grid.CellAt(b.Tile), p.Grid.CellAt(idx)) <= r
-}
-
-// Spokes returns the connections pylons make without links, as pairs of
-// tile indices (pylon first).
-func (p *Planet) Spokes() [][2]int {
-	var out [][2]int
-	for _, py := range p.eco.buildings {
-		if py.Spec().CoverRadius == 0 {
-			continue
-		}
-		for _, b := range p.eco.buildings {
-			if p.covers(py, b.Tile) {
-				out = append(out, [2]int{py.Tile, b.Tile})
-			}
-		}
-	}
-	return out
-}
-
-// AutoLink is how a building of type t placed on c would join a network:
-// covered means a pylon (or, for a new pylon, a building nearby) connects
-// it without a link; otherwise target is the building it should link to,
-// if any is in reach: the nearest in the lander's network, or failing
-// that the nearest at all.
-func (p *Planet) AutoLink(t BuildingType, c Cell) (target Cell, ok, covered bool) {
+// Connection is how a building of type t placed on c would join a network:
+// via is the nearest hub that would connect it, and colony whether that
+// hub's network includes the lander. ok is false when nothing would.
+func (p *Planet) Connection(t BuildingType, c Cell) (via Cell, ok, colony bool) {
 	p.updateNetworks()
 	idx := p.Grid.Index(c)
-	r := Specs[t].CoverRadius
 	best, bestScore := -1, math.Inf(1)
-	for _, b := range p.eco.buildings {
-		if b.Tile == idx {
+	for _, h := range p.eco.buildings {
+		if !isHub(h.Type) || !p.joins(h, t, idx) {
 			continue
 		}
-		d := p.LinkLength(c, p.Grid.CellAt(b.Tile))
-		if p.covers(b, idx) || r > 0 && d <= r {
-			return Cell{}, false, true
-		}
-		if d > max(LinkReach(t), linkReach(b)) {
-			continue
-		}
-		score := d
-		if !p.eco.networks[b.network].HasDepot {
-			score += 1000 // only if nothing in the lander's network is in reach
+		score := p.Distance(c, p.Grid.CellAt(h.Tile))
+		if !p.eco.networks[h.network].HasDepot {
+			score += 1000 // prefer the colony
 		}
 		if score < bestScore {
-			best, bestScore = b.Tile, score
+			best, bestScore = h.Tile, score
 		}
 	}
 	if best < 0 {
 		return Cell{}, false, false
 	}
-	return p.Grid.CellAt(best), true, false
+	return p.Grid.CellAt(best), true, p.eco.networks[p.eco.at[best].network].HasDepot
 }
 
-// Link joins the buildings on a and b, paying for it from the stores.
-func (p *Planet) Link(a, b Cell) error {
-	if err := p.CanLink(a, b); err != nil {
-		return err
-	}
-	p.eco.Stores[Metal] -= p.LinkCost(a, b)
-	p.eco.links[linkKey(p.Grid.Index(a), p.Grid.Index(b))] = struct{}{}
-	p.eco.dirty = true
-	return nil
-}
-
-func linkKey(a, b int) [2]int {
-	if a > b {
-		a, b = b, a
-	}
-	return [2]int{a, b}
-}
-
-// updateNetworks regroups buildings into networks after buildings or links
-// change, using union-find over the links.
+// updateNetworks regroups buildings into networks after buildings change,
+// using union-find over the hubs' connections.
 func (p *Planet) updateNetworks() {
 	e := &p.eco
 	if !e.dirty {
@@ -372,11 +289,24 @@ func (p *Planet) updateNetworks() {
 			parent[max(ra, rb)] = min(ra, rb)
 		}
 	}
-	for _, l := range p.Links() {
-		union(l[0], l[1])
-	}
-	for _, s := range p.Spokes() {
-		union(s[0], s[1])
+	e.hubLinks, e.spokes = e.hubLinks[:0], e.spokes[:0]
+	for _, h := range e.buildings {
+		if !isHub(h.Type) {
+			continue
+		}
+		for _, b := range e.buildings {
+			if !p.joins(h, b.Type, b.Tile) {
+				continue
+			}
+			if isHub(b.Type) {
+				if h.Tile < b.Tile {
+					e.hubLinks = append(e.hubLinks, [2]int{h.Tile, b.Tile})
+				}
+			} else {
+				e.spokes = append(e.spokes, [2]int{h.Tile, b.Tile})
+			}
+			union(h.Tile, b.Tile)
+		}
 	}
 
 	sorted := slices.Clone(e.buildings)

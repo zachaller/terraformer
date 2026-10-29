@@ -43,41 +43,56 @@ func (b *bot) distToType(c Cell, types ...BuildingType) float64 {
 	for _, bl := range b.p.eco.buildings {
 		for _, t := range types {
 			if bl.Type == t {
-				d = math.Min(d, b.p.LinkLength(c, b.p.Grid.CellAt(bl.Tile)))
+				d = math.Min(d, b.p.Distance(c, b.p.Grid.CellAt(bl.Tile)))
 			}
 		}
 	}
 	return d
 }
 
-// connect links c into the lander's network, building solar panels as
-// relays when the network is out of reach.
+// colonyHubs returns the hubs in the lander's network.
+func (b *bot) colonyHubs() []Cell {
+	p := b.p
+	var hubs []Cell
+	for _, bl := range p.eco.buildings {
+		if isHub(bl.Type) && p.NetworkOf(bl).HasDepot {
+			hubs = append(hubs, p.Grid.CellAt(bl.Tile))
+		}
+	}
+	return hubs
+}
+
+// connect connects the building on c to the colony, building pylons
+// (chained out from the colony if need be) as a player would.
 func (b *bot) connect(c Cell) bool {
 	p := b.p
 	for range 30 {
-		net := p.NetworkOf(p.BuildingAt(b.lander))
-		var best Cell
-		bestD := math.Inf(1)
-		for _, m := range net.Members {
-			mc := p.Grid.CellAt(m.Tile)
-			if mc == c {
-				return true // already in it
-			}
-			if d := p.LinkLength(c, mc); d < bestD {
-				best, bestD = mc, d
-			}
+		if p.NetworkOf(p.BuildingAt(c)).HasDepot {
+			return true
 		}
-		if bestD <= MaxLinkLength-0.5 {
-			return p.Link(c, best) == nil
-		}
-		// A relay: the free tile within reach of best that's nearest c.
-		relay, ok := b.nearest(c, bestD-1, func(rc Cell, _ Tile) bool {
-			return p.LinkLength(rc, best) <= MaxLinkLength-1
-		})
-		if !ok || p.Unlocked(SolarPanel) && b.metal() < Specs[SolarPanel].Cost+1 {
+		if !b.afford(Specs[Pylon].Cost, 0) {
 			return false
 		}
-		if _, err := p.Build(SolarPanel, relay); err != nil || p.Link(relay, best) != nil {
+		hubs := b.colonyHubs()
+		inReach := func(x Cell) bool {
+			for _, h := range hubs {
+				if p.Distance(x, h) <= hubReach-0.5 {
+					return true
+				}
+			}
+			return false
+		}
+		// A pylon covering c and in reach of the colony, if there's room;
+		// otherwise the free tile in reach of the colony nearest c, to
+		// step towards it.
+		pc, ok := b.nearest(c, hubCover-0.5, func(x Cell, _ Tile) bool { return inReach(x) })
+		if !ok {
+			pc, ok = b.nearest(c, 200, func(x Cell, _ Tile) bool { return inReach(x) })
+		}
+		if !ok {
+			return false
+		}
+		if _, err := p.Build(Pylon, pc); err != nil {
 			return false
 		}
 	}
@@ -96,12 +111,20 @@ func (b *bot) build(t BuildingType, c Cell) bool {
 	return true
 }
 
-// outpost builds t on c with its own solar panels beside it, not linked to
-// the colony.
+// outpost builds t on c with a pylon and solar panels beside it, not
+// connected to the colony.
 func (b *bot) outpost(t BuildingType, c Cell) bool {
 	p := b.p
 	need := Specs[t].PowerIn
 	if _, err := p.Build(t, c); err != nil {
+		return false
+	}
+	if p.NetworkOf(p.BuildingAt(c)).PowerSupply >= need {
+		return true
+	}
+	if py, ok := b.nearest(c, 1.5, func(Cell, Tile) bool { return true }); !ok {
+		return false
+	} else if _, err := p.Build(Pylon, py); err != nil {
 		return false
 	}
 	for need > 0 {
@@ -109,7 +132,7 @@ func (b *bot) outpost(t BuildingType, c Cell) bool {
 		if !ok {
 			return false
 		}
-		if _, err := p.Build(SolarPanel, s); err != nil || p.Link(c, s) != nil {
+		if _, err := p.Build(SolarPanel, s); err != nil {
 			return false
 		}
 		need -= Specs[SolarPanel].PowerOut
@@ -204,7 +227,7 @@ func (b *bot) act() {
 		}
 	}
 	if n := b.count(Smelter); n == 0 && b.afford(Specs[Smelter].Cost+2, 0) || n < smelters && b.afford(25, 0) {
-		b.near(Smelter, MaxLinkLength*3, func(c Cell, _ Tile) bool { return b.distToType(c, HeaterMachine) > 4 })
+		b.near(Smelter, 24, func(c Cell, _ Tile) bool { return b.distToType(c, HeaterMachine) > 4 })
 	}
 
 	// Power for the colony.

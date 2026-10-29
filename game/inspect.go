@@ -141,11 +141,11 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	st := p.Diagnose(b)
 	c := p.Grid.CellAt(b.Tile)
 	spec := b.Spec()
-	linkIt := func() {
-		g.setTool(toolLink)
-		g.linkFrom = &c
-		g.showMessage("Now tap the building to link it to", msgInfo)
+	addPylon := func() {
+		g.setTool(buildTool(sim.Pylon))
+		g.showMessage("Tap a tile within 4 tiles of it to place a pylon", msgInfo)
 	}
+	pylonFix := fmt.Sprintf("Add a pylon · %.0f metal", sim.Specs[sim.Pylon].Cost)
 	var msg, fix string
 	var action func()
 	fill, border, fg := color.Color(colAmberBg), color.Color(colAmberLn), color.Color(colAmberTx)
@@ -162,17 +162,17 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 		fix = fmt.Sprintf("Add a Solar panel · %.0f metal", sim.Specs[sim.SolarPanel].Cost)
 		action = func() {
 			g.setTool(buildTool(sim.SolarPanel))
-			g.showMessage("Tap a tile to place the solar panel, then link it into this network", msgInfo)
+			g.showMessage("Tap a tile within 4 tiles of a hub in this network to place the solar panel", msgInfo)
 		}
 	case sim.StatusNoPower:
-		msg = "No power. Link it to the colony, or build a Pylon within 4 tiles of it."
-		fix, action = "Link it", linkIt
+		msg = "No power: nothing connects it. Build a Pylon within 4 tiles of it, close enough to the colony's other hubs."
+		fix, action = pylonFix, addPylon
 	case sim.StatusNoInput:
-		msg = fmt.Sprintf("Waiting for %s. Link it to the lander, which shares the colony's stores, or to a mine.", lower(st.Resource.String()))
-		fix, action = "Link it", linkIt
+		msg = fmt.Sprintf("Waiting for %s. Connect it to the colony, whose stores supply it: within 4 tiles of the lander or a connected pylon.", lower(st.Resource.String()))
+		fix, action = pylonFix, addPylon
 	case sim.StatusOutputFull:
-		msg = fmt.Sprintf("Its %s has nowhere to go. Link it to the lander so it reaches the stores.", lower(st.Resource.String()))
-		fix, action = "Link it", linkIt
+		msg = fmt.Sprintf("Its %s has nowhere to go. Connect it to the colony so it reaches the stores.", lower(st.Resource.String()))
+		fix, action = pylonFix, addPylon
 	case sim.StatusNoWind:
 		msg = fmt.Sprintf("The air is too thin to turn it (%s kPa). Wind turbines start working above 2 kPa and reach full power at 40.", pressure(p.Pressure()))
 	case sim.StatusIncoming:
@@ -303,9 +303,9 @@ func runningMessage(p *sim.Planet, b *sim.Building) string {
 	spec := b.Spec()
 	switch b.Type {
 	case sim.Lander:
-		return fmt.Sprintf("Makes %.0f power and holds the colony's stores.", spec.PowerOut)
+		return fmt.Sprintf("Makes %.0f power and holds the colony's stores. Connects every building within %.0f tiles, and pylons within %.0f.", spec.PowerOut, spec.CoverRadius, spec.Reach)
 	case sim.Pylon:
-		return fmt.Sprintf("Connects every building within %.0f tiles to its network, and links up to %.0f tiles away.", spec.CoverRadius, spec.LinkReach)
+		return fmt.Sprintf("Connects every building within %.0f tiles to its network, and joins pylons and the lander within %.0f tiles.", spec.CoverRadius, spec.Reach)
 	case sim.SolarPanel, sim.Geothermal:
 		return fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
 	case sim.WindTurbine:
@@ -418,11 +418,6 @@ func (g *Game) inspectActions(u *ui, c sim.Cell, b *sim.Building, x, y, w float6
 	if b == nil {
 		acts = append(acts, act{iconBuild, "Build here", false, func() { g.menuOpen = true }})
 	} else {
-		acts = append(acts, act{iconLink, "Link", false, func() {
-			g.setTool(toolLink)
-			g.linkFrom = &c
-			g.showMessage("Now tap the building to link it to", msgInfo)
-		}})
 		if b.Type != sim.Lander {
 			refund := b.Spec().Cost / 2
 			acts = append(acts, act{iconRemove, fmt.Sprintf("Remove · +%.0f", refund), true, func() {
@@ -435,6 +430,9 @@ func (g *Game) inspectActions(u *ui, c sim.Cell, b *sim.Building, x, y, w float6
 				g.showMessage(fmt.Sprintf("Removed. %.0f metal refunded", refund), msgInfo)
 			}})
 		}
+	}
+	if len(acts) == 0 {
+		return 0
 	}
 	bw := (w - gap*float64(len(acts)-1)) / float64(len(acts))
 	for i, a := range acts {

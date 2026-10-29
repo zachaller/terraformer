@@ -73,7 +73,7 @@ func (p *Planet) NearestPolluter(c Cell, maxDist float64) (*Building, float64) {
 		if b.Spec().Pollution == 0 {
 			continue
 		}
-		if d := p.LinkLength(c, p.Grid.CellAt(b.Tile)); d <= maxDist && d < bestD {
+		if d := p.Distance(c, p.Grid.CellAt(b.Tile)); d <= maxDist && d < bestD {
 			best, bestD = b, d
 		}
 	}

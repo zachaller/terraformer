@@ -22,7 +22,7 @@ func placeDemoHeaters(p *sim.Planet) {
 
 // placeDemoColony lands near the ore deposit closest to direction front and
 // builds a small working colony: a mine, a smelter, a solar panel and a
-// heater, all linked to the lander. Used to preview the economy.
+// heater, all connected through the lander. Used to preview the economy.
 // With showcase set, it also builds one of every other building.
 func placeDemoColony(p *sim.Planet, front sim.Vec3, showcase bool) {
 	g := p.Grid
@@ -64,11 +64,7 @@ func placeDemoColony(p *sim.Planet, front sim.Vec3, showcase bool) {
 	if p.Land(lander) != nil {
 		return
 	}
-	build := func(bt sim.BuildingType, c sim.Cell) {
-		if _, err := p.Build(bt, c); err == nil {
-			_ = p.Link(lander, c)
-		}
-	}
+	build := func(bt sim.BuildingType, c sim.Cell) { _, _ = p.Build(bt, c) }
 	build(sim.Mine, ore)
 	build(sim.Smelter, free())
 	build(sim.SolarPanel, free())
@@ -79,9 +75,10 @@ func placeDemoColony(p *sim.Planet, front sim.Vec3, showcase bool) {
 	// One of everything else, on tiles made suitable for it.
 	p.UnlockAll()
 	p.AddMetal(5000)
+	build(sim.Pylon, free())
 	for bt := sim.IceDrill; bt < sim.NumBuildingTypes; bt++ {
 		c := free()
-		if bt == sim.Comet {
+		if bt == sim.Comet || bt == sim.Pylon {
 			continue
 		}
 		t := &p.Tiles[g.Index(c)]

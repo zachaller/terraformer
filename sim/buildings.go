@@ -138,10 +138,9 @@ type BuildingSpec struct {
 	// Countdown is how many steps a comet takes to arrive.
 	Countdown int
 
-	// LinkReach is how far, in tiles, links to or from it can reach, if
-	// further than MaxLinkLength. CoverRadius is how far, in tiles, it
-	// connects every building around it without links.
-	LinkReach, CoverRadius float64
+	// Hubs (the lander and pylons) join networks: they connect every
+	// building within CoverRadius tiles, and other hubs within Reach tiles.
+	Reach, CoverRadius float64
 
 	// Depot buildings connect a network to the colony stores: surplus
 	// output goes into the stores, and consumers can draw from them.
@@ -151,8 +150,10 @@ type BuildingSpec struct {
 // Specs is the data for every building type, indexed by BuildingType.
 var Specs = [NumBuildingTypes]BuildingSpec{
 	Lander: {
-		Name:     "Lander",
-		PowerOut: 3,
+		Name:        "Lander",
+		PowerOut:    3,
+		Reach:       hubReach,
+		CoverRadius: hubCover,
 		// A trickle of metal from salvage and recycling, so a colony that's
 		// spent everything can always build another mine eventually.
 		Outputs: Amounts{Metal: 0.004},
@@ -168,8 +169,8 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Name:        "Pylon",
 		Category:    CatPower,
 		Cost:        3,
-		LinkReach:   12,
-		CoverRadius: 4,
+		Reach:       hubReach,
+		CoverRadius: hubCover,
 	},
 	WindTurbine: {
 		Name:       "Wind turbine",
@@ -257,7 +258,7 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		UnlockedBy: "Liquid water",
 		PowerIn:    4,
 		Inputs:     Amounts{Water: 0.1},
-		Emits:      Air{O2: 0.00012},
+		Emits:      Air{O2: 0.0001},
 	},
 	NitrogenPlant: {
 		Name:       "Nitrogen plant",
@@ -313,10 +314,10 @@ const (
 	bufferCap = 5
 	// startingMetal is in the colony stores when the lander touches down.
 	startingMetal = 30
-	// MaxLinkLength is the longest link, in tile widths.
-	MaxLinkLength = 8
-	// linkCostPerTile is the metal a link costs per tile width of length.
-	linkCostPerTile = 0.5
+	// hubCover is how far, in tiles, hubs connect buildings around them,
+	// and hubReach how far apart hubs can be and still connect.
+	hubCover = 4
+	hubReach = 10
 	// demolishRefund is the share of a building's cost returned on demolition.
 	demolishRefund = 0.5
 	// iceToWater is how much water an ice drill gets from one unit of ice.

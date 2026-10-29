@@ -17,7 +17,6 @@ type tool int
 const (
 	toolLand tool = iota
 	toolInspect
-	toolLink
 	toolDemolish
 	// toolBuild + a building type builds that type.
 	toolBuild
@@ -41,8 +40,6 @@ func (t tool) String() string {
 	switch t {
 	case toolLand:
 		return "Land"
-	case toolLink:
-		return "Link"
 	case toolDemolish:
 		return "Remove"
 	}
@@ -62,7 +59,7 @@ var speeds = []struct {
 // buildInfo is the build menu's description of each building.
 var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.SolarPanel:        {"Makes 2 power", "Clean"},
-	sim.Pylon:             {"Connects all within 4 tiles; links reach 12", "No power needed"},
+	sim.Pylon:             {"Connects all within 4 tiles; joins hubs within 10", "No power needed"},
 	sim.WindTurbine:       {"Up to 6 power once the air is thick", "Clean"},
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
@@ -84,9 +81,7 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 func (g *Game) setTool(t tool) {
 	g.tool = t
 	g.menuOpen = false
-	g.linkFrom = nil
 	g.pending = nil
-	g.linkDrag = nil
 	g.goalsOpen = false
 	g.airOpen = false
 }
@@ -123,7 +118,7 @@ func (g *Game) runUI(u *ui) {
 	narrow := math.Min(right, left+480)
 	y := g.statusBar(u, left, right, top)
 	_, placing := g.placing()
-	if (placing || g.tool == toolLink) && !g.menuOpen {
+	if placing && !g.menuOpen {
 		y = g.modeBanner(u, left, narrow, y+gap)
 	} else {
 		y = g.goalCard(u, left, narrow, y+gap)
@@ -182,7 +177,6 @@ func (g *Game) runUI(u *ui) {
 		}
 		g.viewRail(u, right, planetTop, planetBottom)
 	}
-	g.linkBubble(u, left, right)
 	if !u.measuring {
 		g.planetTarget = [4]float64{planetLeft * s, planetTop * s, (planetRight - planetLeft) * s, math.Max(planetBottom-planetTop, 80) * s}
 	}
@@ -403,7 +397,6 @@ func (g *Game) dock(u *ui, left, right, y float64) {
 	}
 	btns := []dockBtn{
 		{iconBuild, buildLabel, g.menuOpen || building, true, func() { g.menuOpen = !g.menuOpen }},
-		{iconLink, "Link", g.tool == toolLink, false, func() { g.setTool(toolLink) }},
 		{iconInspect, "Inspect", g.tool == toolInspect, false, func() { g.setTool(toolInspect) }},
 		{iconRemove, "Remove", g.tool == toolDemolish, false, func() { g.setTool(toolDemolish) }},
 	}

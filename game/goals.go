@@ -220,7 +220,7 @@ func (g *Game) alerts() []alert {
 	if n := p.NetworkOf(p.Buildings()[0]); n.PowerSatisfaction() < 1 {
 		out = append(out, alert{iconBolt, fmt.Sprintf("Colony short of power (%.0f / %.0f)", n.PowerSupply, n.PowerDemand), true, "Add solar", func() {
 			g.setTool(buildTool(sim.SolarPanel))
-			g.showMessage("Tap a tile to place a solar panel, then link it to the colony", msgInfo)
+			g.showMessage("Tap a tile near the colony to place a solar panel", msgInfo)
 		}})
 	}
 	if len(empty) > 0 {

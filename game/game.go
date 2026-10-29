@@ -84,7 +84,6 @@ type Game struct {
 
 	tool     tool
 	menuOpen bool
-	linkFrom *sim.Cell // first end of a link being made
 	message  string
 	msgKind  msgKind
 	msgUntil int // tick the message disappears
@@ -92,8 +91,7 @@ type Game struct {
 	msgAction      func()
 	msgActionLabel string
 
-	pending  *sim.Cell // where the building being placed would go
-	linkDrag *linkDrag // a link being dragged out
+	pending *sim.Cell // where the building being placed would go
 
 	goalCollapsed bool
 	goalsOpen     bool         // the goals sheet is showing
@@ -166,7 +164,7 @@ func (g *Game) setPlanet(p *sim.Planet) {
 		g.atlasSrc = atlasSources(p.Grid)
 	}
 	g.atlasDirty = true
-	g.selected, g.linkFrom = nil, nil
+	g.selected = nil
 	g.menuOpen = false
 	g.tool = toolLand
 	if p.Landed() {
@@ -194,30 +192,6 @@ func (g *Game) Update() error {
 	g.handleKeys()
 	gs := g.input.update()
 	g.cam.zoomBy(gs.zoom)
-	if gs.pinching {
-		g.linkDrag = nil
-	}
-	if gs.press && g.tool == toolLink && g.linkDrag == nil && !g.uiHitAt(gs.pressX, gs.pressY) {
-		if c, ok := g.cam.pick(g.planet.Grid, gs.pressX, gs.pressY); ok && g.planet.BuildingAt(c) != nil {
-			g.linkDrag = &linkDrag{from: c, x: gs.pressX, y: gs.pressY}
-		}
-	}
-	if g.linkDrag != nil {
-		// Dragging out a link: the finger draws the link instead of
-		// turning the planet.
-		g.linkDrag.x, g.linkDrag.y = gs.curX, gs.curY
-		switch {
-		case gs.tap:
-			// A tap rather than a drag: link by tapping instead.
-			g.linkDrag = nil
-			g.tapPlanet(gs.tapX, gs.tapY)
-		case gs.release:
-			g.linkDrag.x, g.linkDrag.y = gs.releaseX, gs.releaseY
-			g.finishLinkDrag()
-		}
-		gs.tap, gs.dragging, gs.dragX, gs.dragY = false, false, 0, 0
-		g.cam.stop()
-	}
 	switch {
 	case gs.dragging && (gs.dragX != 0 || gs.dragY != 0):
 		g.focus = nil
@@ -227,7 +201,7 @@ func (g *Game) Update() error {
 	default:
 		g.cam.coast()
 	}
-	if gs.tap && g.linkDrag == nil {
+	if gs.tap {
 		u := g.newUI(nil)
 		u.tapping, u.tapX, u.tapY = true, gs.tapX/u.s, gs.tapY/u.s
 		g.runUI(u)
@@ -285,8 +259,6 @@ func (g *Game) handleKeys() {
 		g.menuOpen = !g.menuOpen
 	case inpututil.IsKeyJustPressed(ebiten.KeyI) && landed:
 		g.setTool(toolInspect)
-	case inpututil.IsKeyJustPressed(ebiten.KeyL) && landed:
-		g.setTool(toolLink)
 	case inpututil.IsKeyJustPressed(ebiten.KeyX) && landed:
 		g.setTool(toolDemolish)
 	case inpututil.IsKeyJustPressed(ebiten.KeyG):
@@ -295,7 +267,6 @@ func (g *Game) handleKeys() {
 		g.confirmPlacement()
 	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
 		g.menuOpen = false
-		g.linkFrom = nil
 		g.selected = nil
 		g.pending = nil
 		g.goalsOpen = false
@@ -368,7 +339,6 @@ func (g *Game) tapPlanet(x, y float64) {
 	g.menuOpen = false
 	g.selectAt(x, y)
 	if g.selected == nil {
-		g.linkFrom = nil
 		return
 	}
 	c := *g.selected
@@ -397,32 +367,6 @@ func (g *Game) tapPlanet(x, y float64) {
 		} else {
 			g.showMessage("Removed. Half its metal was refunded", msgInfo)
 		}
-	case toolLink:
-		g.tapLink(c)
-	}
-}
-
-// tapLink makes links one tap at a time: tap a building to start, then tap
-// another to link them. The second building becomes the start of the next
-// link, so chains are quick to make. Tapping empty ground cancels.
-func (g *Game) tapLink(c sim.Cell) {
-	p := g.planet
-	switch {
-	case p.BuildingAt(c) == nil:
-		g.linkFrom = nil
-		g.showMessage(sim.ErrNoBuilding.Error(), msgWarn)
-	case g.linkFrom == nil || *g.linkFrom == c:
-		g.linkFrom = &c
-		g.showMessage("Now tap a building to link it to", msgInfo)
-	default:
-		from := *g.linkFrom
-		cost := p.LinkCost(from, c)
-		if err := p.Link(from, c); err != nil {
-			g.showMessage(err.Error(), msgWarn)
-			return
-		}
-		g.linkFrom = &c
-		g.showMessage(fmt.Sprintf("Linked for %.1f metal. Tap another building to keep going", cost), msgGood)
 	}
 }
 
@@ -445,7 +389,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	g.drawPlanet(screen)
 	g.drawLinks(screen)
-	g.drawLinkPreview(screen)
 	g.runUI(g.newUI(screen))
 
 	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {
@@ -522,17 +465,8 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
 }
 
-// highlighted is the tile to highlight: the start of a link being made, or
-// else the selected tile.
-func (g *Game) highlighted() *sim.Cell {
-	if g.linkDrag != nil {
-		return &g.linkDrag.from
-	}
-	if g.tool == toolLink && g.linkFrom != nil {
-		return g.linkFrom
-	}
-	return g.selected
-}
+// highlighted is the tile to highlight: the selected one.
+func (g *Game) highlighted() *sim.Cell { return g.selected }
 
 // gridAmount is how strongly to draw tile grid lines: only while a tool that
 // places or targets individual tiles is in use, and there's a tapped tile to
@@ -549,44 +483,43 @@ func (g *Game) gridAmount() float64 {
 func (g *Game) drawLinks(screen *ebiten.Image) {
 	p := g.planet
 	s := float32(ebiten.Monitor().DeviceScaleFactor())
-	// Links stay in the background, thin and faint, except while working
-	// with them (linking, placing, the Industry view) or for the network of
-	// the building being inspected.
+	// Connections stay in the background, thin and faint, except while
+	// placing a building, in the Industry view, or for the network of the
+	// building being inspected.
 	_, placing := g.placing()
-	busy := g.tool == toolLink || placing || g.view == viewIndustry
+	busy := placing || g.view == viewIndustry
 	var focus *sim.Network
 	if g.inspectOpen() {
 		if b := p.BuildingAt(*g.selected); b != nil {
 			focus = p.NetworkOf(b)
 		}
 	}
-	style := func(tile int) (color.RGBA, float32) {
+	style := func(tile int) (color.RGBA, float32, bool) {
 		n := p.NetworkOf(p.BuildingAt(p.Grid.CellAt(tile)))
 		c := color.RGBA{90, 220, 255, 255}
 		if n.PowerSatisfaction() < 1 {
 			c = color.RGBA{255, 150, 40, 255}
 		}
 		if busy || n == focus {
-			return c, 2 * s
+			return c, 2 * s, true
 		}
-		return withAlpha(c, 90), 1.2 * s
+		return withAlpha(c, 90), 1.2 * s, false
 	}
-	for _, l := range p.Links() {
-		c, w := style(l[0])
+	// Between hubs: always shown, as the network's backbone.
+	for _, l := range p.HubLinks() {
+		c, w, _ := style(l[0])
 		g.drawArc(screen, p.Dir(p.Grid.CellAt(l[0])), p.Dir(p.Grid.CellAt(l[1])), w, c, false)
 	}
-	// Pylons' connections without links: spokes, only while they matter.
+	// From hubs to the buildings they connect: only while they matter.
 	for _, sp := range p.Spokes() {
-		if !busy && p.NetworkOf(p.BuildingAt(p.Grid.CellAt(sp[0]))) != focus {
-			continue
+		if c, _, strong := style(sp[0]); strong {
+			g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, withAlpha(c, 110), false)
 		}
-		c, _ := style(sp[0])
-		g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, withAlpha(c, 90), false)
 	}
-	// The link a building being placed will make.
+	// What a building being placed would connect through.
 	if bt, ok := g.placing(); ok && g.pending != nil && p.CanBuild(bt, *g.pending) == nil {
-		if target, ok, _ := p.AutoLink(bt, *g.pending); ok {
-			g.drawArc(screen, p.Dir(*g.pending), p.Dir(target), 2*s, color.RGBA{90, 220, 255, 200}, true)
+		if via, ok, _ := p.Connection(bt, *g.pending); ok {
+			g.drawArc(screen, p.Dir(*g.pending), p.Dir(via), 2*s, color.RGBA{90, 220, 255, 200}, true)
 		}
 	}
 }

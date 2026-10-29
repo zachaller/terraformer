@@ -27,7 +27,7 @@ func TestLockedBuildings(t *testing.T) {
 }
 
 func TestIceDrillFeedsElectrolyser(t *testing.T) {
-	p, lander, _ := economyPlanet(t)
+	p, _, _ := economyPlanet(t)
 	unlockAll(p)
 	p.eco.Stores[Metal] = 1000
 	drill := Cell{Diamond: 4, I: 6, J: 8}
@@ -37,10 +37,7 @@ func TestIceDrillFeedsElectrolyser(t *testing.T) {
 	mustBuild(t, p, Electrolyser, el)
 	for _, c := range []Cell{{Diamond: 4, I: 9, J: 9}, {Diamond: 4, I: 9, J: 7}, {Diamond: 4, I: 7, J: 9}} {
 		mustBuild(t, p, SolarPanel, c)
-		mustLink(t, p, lander, c)
 	}
-	mustLink(t, p, lander, drill)
-	mustLink(t, p, lander, el)
 	o2 := p.Air.O2
 	for range 200 {
 		p.Step()
@@ -105,7 +102,7 @@ func TestCometImpact(t *testing.T) {
 }
 
 func TestDustSpreaderDarkensIce(t *testing.T) {
-	p, lander, _ := economyPlanet(t)
+	p, _, _ := economyPlanet(t)
 	unlockAll(p)
 	p.eco.Stores[Metal] = 1000
 	c := Cell{Diamond: 4, I: 6, J: 8}
@@ -113,7 +110,6 @@ func TestDustSpreaderDarkensIce(t *testing.T) {
 		p.Tiles[idx].Ice = 1
 	}
 	mustBuild(t, p, DustSpreader, c)
-	mustLink(t, p, lander, c)
 	for range 100 {
 		p.Step()
 	}

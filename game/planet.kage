@@ -24,15 +24,15 @@ var Time float    // seconds
 var Light vec3    // unit light direction, view space
 var Grid float    // tile grid line strength, 0 to hide
 var GridAt vec3   // planet-space centre of the patch where grid lines show
+var GridFace float // cube face of the tile at GridAt
 
-// A building being placed: its cell (face < 0 means none), type + 1, the
-// planet-space direction of its tile centre, whether the spot is valid, and
-// the radius in tiles of the area it affects, tinted AreaTint.
+// A building being placed: its cell (face < 0 means none), type + 1, whether
+// the spot is valid, and the cells it would heat or pollute (unused entries
+// have face < 0), tinted AreaTint. Area's size matches game.maxAreaCells.
 var Ghost vec3
 var GhostType float
-var GhostDir vec3
 var GhostOK float
-var GhostArea float
+var Area [12]vec3
 var AreaTint vec3
 
 // faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1], on
@@ -326,13 +326,18 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	base *= 0.92 + 0.16*detail
 
 	// Tile grid lines, only while placing things and only in a small patch
-	// around the last tapped tile (so the cube layout never shows), faded
-	// out when tiles are small on screen.
+	// (about two tiles) around the last tapped tile, faded out when tiles
+	// are small on screen. Each cube face has its own grid, so rows change
+	// direction at a seam; lines on a different face from the tapped tile
+	// are drawn faintly so the fold there doesn't stand out.
 	g := fract(st)
 	w := max(fwidth(st), vec2(1e-4))
 	edge := min(min(g.x, 1-g.x)/w.x, min(g.y, 1-g.y)/w.y)
 	lineAmt := 1 - clamp(edge, 0, 1)
-	patch := 1 - smoothstep(2*tileAngle, 4*tileAngle, length(d-GridAt))
+	patch := 1 - smoothstep(1.4*tileAngle, 2.6*tileAngle, length(d-GridAt))
+	if abs(f.x-GridFace) > 0.5 {
+		patch *= 0.3
+	}
 	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.35 * Grid * patch
 	base *= 1 - lineAmt*strength
 
@@ -365,11 +370,11 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	if Ghost.x >= 0 {
 		// Tint the tiles the new building would heat or pollute.
-		uv := (ij+0.5)/N*2 - 1
-		centre := normalize(dirFromFaceUV(f.x, uv.x, uv.y))
-		dist := length(centre-GhostDir) / tileAngle
-		if dist > 0.5 && dist < GhostArea {
-			base = mix(base, AreaTint, 0.38)
+		for i := 0; i < 12; i++ {
+			a := Area[i]
+			if a.x == f.x && a.y == ij.x && a.z == ij.y {
+				base = mix(base, AreaTint, 0.38)
+			}
 		}
 		if f.x == Ghost.x && ij.x == Ghost.y && ij.y == Ghost.z {
 			gb := building(GhostType, tileLocal(d, f.x, ij), 1, max(w.x, w.y)*1.2)

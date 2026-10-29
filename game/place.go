@@ -42,18 +42,45 @@ func (g *Game) confirmPlacement() {
 	})
 }
 
-// placementArea is the radius, in tiles, of the area a building affects, and
-// the colour to tint it.
-func placementArea(bt sim.BuildingType) (float64, color.RGBA) {
+// maxAreaCells is the most tiles a placement preview tints; the shader has
+// an array of this size.
+const maxAreaCells = 12
+
+// placementArea is how many neighbour-steps out a building's effect reaches,
+// and the colour to tint that area.
+func placementArea(bt sim.BuildingType) (int, color.RGBA) {
 	switch bt {
 	case sim.HeaterMachine:
-		return 1.2, colAmber // its tile's four neighbours
+		return 1, colAmber // its tile's four neighbours
 	case sim.Mine:
-		return 1.2, rgba(0xB07CA0)
+		return 1, rgba(0xB07CA0)
 	case sim.Smelter:
-		return 2.2, rgba(0xB07CA0)
+		return 2, rgba(0xB07CA0)
 	}
 	return 0, colAmber
+}
+
+// areaCells lists the tiles within steps neighbour-steps of c (not c itself),
+// following the same neighbours as the simulation, so the preview is right
+// across cube seams.
+func areaCells(grid sim.Grid, c sim.Cell, steps int) []sim.Cell {
+	seen := map[sim.Cell]bool{c: true}
+	frontier := []sim.Cell{c}
+	var out []sim.Cell
+	for range steps {
+		var next []sim.Cell
+		for _, f := range frontier {
+			for _, nb := range grid.Neighbors(f) {
+				if !seen[nb] && len(out) < maxAreaCells {
+					seen[nb] = true
+					out = append(out, nb)
+					next = append(next, nb)
+				}
+			}
+		}
+		frontier = next
+	}
+	return out
 }
 
 // modeBanner replaces the goal card while placing or linking, saying what to

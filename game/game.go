@@ -466,22 +466,27 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	if c := g.highlighted(); c != nil && g.pending == nil {
 		sel = []float32{float32(c.Face), float32(c.I), float32(c.J)}
 	}
-	ghost, ghostDir, ghostType, ghostOK, area, tint := []float32{-1, 0, 0}, []float32{0, 0, 0}, float32(0), float32(1), float32(0), []float32{0, 0, 0}
+	ghost, ghostType, ghostOK, tint := []float32{-1, 0, 0}, float32(0), float32(1), []float32{0, 0, 0}
+	area := make([]float32, 3*maxAreaCells)
+	for i := range maxAreaCells {
+		area[3*i] = -1
+	}
 	if bt, ok := g.placing(); ok && g.pending != nil {
 		c := *g.pending
 		ghost = []float32{float32(c.Face), float32(c.I), float32(c.J)}
-		ghostDir = vec3f(g.planet.Grid.DirFromCell(c))
 		ghostType = float32(bt) + 1
 		if g.planet.CanBuild(bt, c) != nil {
 			ghostOK = 0
 		}
-		r, col := placementArea(bt)
-		area = float32(r)
+		steps, col := placementArea(bt)
+		for i, a := range areaCells(g.planet.Grid, c, steps) {
+			area[3*i], area[3*i+1], area[3*i+2] = float32(a.Face), float32(a.I), float32(a.J)
+		}
 		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
 	}
-	gridAt := []float32{0, 0, 0}
+	gridAt, gridFace := []float32{0, 0, 0}, float32(0)
 	if c := g.highlighted(); c != nil {
-		gridAt = vec3f(g.planet.Grid.DirFromCell(*c))
+		gridAt, gridFace = vec3f(g.planet.Grid.DirFromCell(*c)), float32(c.Face)
 	}
 	op := &ebiten.DrawTrianglesShaderOptions{}
 	op.Images[0] = g.atlas
@@ -497,11 +502,11 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Light":     vec3f(lightDir),
 		"Grid":      float32(g.gridAmount()),
 		"GridAt":    gridAt,
+		"GridFace":  gridFace,
 		"Ghost":     ghost,
-		"GhostDir":  ghostDir,
 		"GhostType": ghostType,
 		"GhostOK":   ghostOK,
-		"GhostArea": area,
+		"Area":      area,
 		"AreaTint":  tint,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)

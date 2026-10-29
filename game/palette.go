@@ -56,6 +56,26 @@ var (
 	oreColor   = rgb{230, 180, 60}
 	smogColor  = rgb{75, 55, 70}
 	greyColor  = rgb{70, 70, 75}
+
+	// speciesColors is how each species tints the surface, from the UX
+	// mocks' life sheet: land shifts olive, then green, then deep green.
+	speciesColors = [sim.NumSpecies]rgb{
+		sim.Moss:     {143, 160, 90},
+		sim.Grass:    {110, 154, 58},
+		sim.Shrubs:   {62, 107, 44},
+		sim.Forest:   {34, 64, 30},
+		sim.Plankton: {42, 122, 128},
+		sim.Fish:     {60, 140, 175},
+	}
+	// lifeViewColors are brighter versions for the Life view.
+	lifeViewColors = [sim.NumSpecies]rgb{
+		sim.Moss:     {175, 195, 95},
+		sim.Grass:    {125, 205, 60},
+		sim.Shrubs:   {70, 160, 55},
+		sim.Forest:   {30, 110, 35},
+		sim.Plankton: {60, 175, 175},
+		sim.Fish:     {100, 205, 240},
+	}
 )
 
 // The tile atlas the shader reads is (6·P)×(2·P) pixels, where P = N+2: one
@@ -126,6 +146,11 @@ func tileColor(t sim.Tile, v viewMode) rgb {
 		if t.Life > 0 {
 			c = mix(c, rgb{80, 220, 80}, 0.3+0.7*t.Life)
 		}
+		for s := range sim.NumSpecies {
+			if t.Bio[s] > 0 {
+				c = mix(c, lifeViewColors[s], 0.4+0.6*t.Bio[s])
+			}
+		}
 		return c
 	case viewIndustry:
 		c := mix(greyColor, rgb{120, 120, 125}, (t.Height+1)/2)
@@ -148,7 +173,12 @@ func surfaceColor(t sim.Tile) rgb {
 	c = mix(c, smogColor, t.Pollution)
 	c = mix(c, rgb{c[0] * 0.75, c[1] * 0.75, c[2] * 0.75}, t.Water/0.05) // damp soil
 	c = mix(c, lifeColor, t.Life*0.75)
+	for _, s := range []sim.Species{sim.Moss, sim.Grass, sim.Shrubs, sim.Forest} {
+		c = mix(c, speciesColors[s], t.Bio[s]*0.85)
+	}
 	c = mix(c, waterColor, (t.Water-0.05)*4*0.85) // standing water
+	c = mix(c, speciesColors[sim.Plankton], t.Bio[sim.Plankton]*0.45)
+	c = mix(c, speciesColors[sim.Fish], t.Bio[sim.Fish]*0.25)
 	return mix(c, iceColor, t.Ice*2)
 }
 

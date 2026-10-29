@@ -44,6 +44,8 @@ type Tile struct {
 	Ore float64
 	// Pollution from industry; life can't survive where it's high.
 	Pollution float64
+	// Bio is the density, 0 to 1, of each species that follows microbes.
+	Bio [NumSpecies]float64
 }
 
 // Kind classifies the tile's terrain by elevation.
@@ -86,6 +88,7 @@ type Planet struct {
 
 	// Scratch buffers reused by Step.
 	nextTemp, nextLife, flow []float64
+	nextBio                  [][NumSpecies]float64
 }
 
 const (
@@ -108,6 +111,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 		nextTemp:   make([]float64, cells),
 		nextLife:   make([]float64, cells),
 		flow:       make([]float64, cells),
+		nextBio:    make([][NumSpecies]float64, cells),
 		eco:        newEconomy(cells),
 	}
 	totalIce := 0.0

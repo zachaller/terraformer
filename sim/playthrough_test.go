@@ -165,7 +165,7 @@ func TestPlaythrough(t *testing.T) {
 	b := &bot{t: t, p: p}
 	b.land()
 	reached := map[int]uint64{}
-	const maxSteps = 30000 // 3000 days, 50 minutes at 1x
+	const maxSteps = 60000 // 6000 days, 100 minutes at 1x
 	for step := 0; step < maxSteps && p.GoalsDone() < len(Goals); step++ {
 		if step%20 == 0 {
 			b.act()

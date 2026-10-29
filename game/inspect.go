@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/zachaller/terraformer/sim"
 )
@@ -69,7 +70,11 @@ func (g *Game) inspectContent(u *ui, x, y, w float64) float64 {
 	if b != nil {
 		y += g.diagnosis(u, b, x, y, w)
 	}
-	y += g.lifeChecklist(u, c, t, x, y, w)
+	if next, ok := sim.NextSpecies(t); t.Life < 0.5 && !(ok && sim.SpeciesSpecs[next].Aquatic) {
+		y += g.lifeChecklist(u, c, t, x, y, w)
+	} else {
+		y += g.speciesSection(u, t, x, y, w)
+	}
 	y += g.tileFacts(u, c, t, x, y, w)
 	if b != nil {
 		y += g.networkStats(u, b, x, y, w)
@@ -384,4 +389,55 @@ func (g *Game) inspectActions(u *ui, c sim.Cell, b *sim.Building, x, y, w float6
 		u.area(xx, y, bw, 48, a.action)
 	}
 	return 48
+}
+
+// speciesSection shows what lives on the tile and what the next stage of life
+// needs, once microbes are established (or the tile is under water).
+func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
+	y0 := y
+	u.text("LIVING HERE", x, y, sans, 11, semibold, colMuted)
+	y += u.lineH(sans, 11, semibold) + 6
+	var chips []chip
+	if t.Life > 0.01 {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconLeaf, colTeal), labelPart("Microbes"), numPart(fmt.Sprintf("%.0f%%", t.Life*100), colText)}, fill: colCard})
+	}
+	for s := range sim.NumSpecies {
+		if t.Bio[s] > 0.01 {
+			col := speciesColors[s]
+			chips = append(chips, chip{parts: []chipPart{iconPart(iconLeaf, color.RGBA{uint8(col[0]), uint8(col[1]), uint8(col[2]), 255}), labelPart(s.String()), numPart(fmt.Sprintf("%.0f%%", t.Bio[s]*100), colText)}, fill: colCard})
+		}
+	}
+	if len(chips) == 0 {
+		y += u.paragraph("Nothing yet.", x, y, w, 12, colBody)
+	} else {
+		y = u.flowChips(chips, x, x+w, y) + 6
+	}
+	y += 8
+
+	next, ok := sim.NextSpecies(t)
+	if !ok {
+		y += u.paragraph("Every stage of life thrives here.", x, y, w, 12, colBody)
+		return y - y0 + 12
+	}
+	u.text("NEXT: "+strings.ToUpper(next.String()), x, y, sans, 11, semibold, colMuted)
+	y += u.lineH(sans, 11, semibold) + 2
+	reqs := g.planet.Requirements(next, t)
+	for i, r := range reqs {
+		rh := 30.0
+		ic, col, valCol := iconCheck, color.Color(colTeal), color.Color(colIcon)
+		if !r.OK {
+			ic, col, valCol = iconCross, colRed, colRed
+		}
+		u.icon(ic, x, y+(rh-16)/2, 16, col)
+		u.text(r.Label, x+26, y+(rh-u.lineH(sans, 13, regular))/2, sans, 13, regular, colText)
+		need := " (" + r.Need + ")"
+		needW := u.textW(need, sans, 11, regular)
+		u.textRight(need, x+w, y+(rh-u.lineH(sans, 11, regular))/2, sans, 11, regular, colMuted)
+		u.textRight(r.Have, x+w-needW, y+(rh-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, valCol)
+		if i < len(reqs)-1 {
+			u.fillRound(x, y+rh-1, w, 1, 0, rgba(0x1F2836))
+		}
+		y += rh
+	}
+	return y - y0 + 12
 }

@@ -9,6 +9,7 @@ shape a barren planet until life takes hold. See
 ![A small colony: lander, solar, mine, smelter and heater](docs/images/colony.png)
 ![Main screen](docs/images/ui-main.png)
 ![Inspect panel](docs/images/ui-inspect.png)
+![A living planet: seas, grassland and forest](docs/images/late-game.png)
 
 ## Status: first playable (roadmap step 5)
 
@@ -21,16 +22,25 @@ shape a barren planet until life takes hold. See
 - A running climate simulation: temperature by latitude, greenhouse effect,
   heat spreading between tiles, ice melting and freezing, water flowing
   downhill, and microbes appearing and spreading where it's warm, wet and
-  clean. Melting ice releases CO₂, which thickens the atmosphere and warms the
+  clean. Life then follows in stages, each needing the one before it on its
+  tile plus warmer ground and thicker air: moss, grass, shrubs and forest on
+  land; plankton and fish in standing water. Melting ice releases CO₂, which thickens the atmosphere and warms the
   whole planet: heat enough of it and the planet tips into runaway warming.
 - A colony economy: choose a landing site, then build and link machines.
-- Goals that guide you from landing to a living world, shown at the top of
-  the screen with a hint and progress: Land → Dig for ore → Make metal →
-  Warm the ground → Liquid water → First life → Spread life → Thicken the
-  air → Thaw → Living world.
+- Goals that guide you from landing to forests, shown at the top of the
+  screen with a hint and progress (tap the card for the full list): Land →
+  Dig for ore → Make metal → Warm the ground → Liquid water → First life →
+  Spread life → Thicken the air → First moss → Thaw → Living world → Life in
+  the seas → Grasslands → Forests. Completing one offers a Show me button.
+- Live alerts under the goal card for colony problems (no power, short of
+  power, empty mines, starved or blocked buildings), each with a one-tap fix.
 - A designed interface (see the [UX mocks](https://claude.ai/artifact/LMMKh2HSCZaoKDpbrFCqT3)):
   Sora and JetBrains Mono fonts (embedded; see `game/fonts/`), status chips,
-  a goal card, a tool dock, a map-view rail, messages, and an inspect panel.
+  a goal card and goals list, alerts, a tool dock, a map-view rail, messages,
+  an inspect panel (including what lives on a tile and what the next stage
+  needs), placement previews and drag-to-link. Buildings are drawn in the
+  shader with status badges (bolt: short of power; broken link: no power;
+  !: blocked; -: deposit empty).
 - Automatic saving every 30 seconds, when the app goes into the background,
   and when the desktop window closes. **Tool → New planet** (tap twice)
   starts over on a fresh planet.
@@ -99,7 +109,7 @@ go run ./cmd/desktop -seed 7 -size 64
 | `-view` | surface | Starting view: `surface`, `temp`, `water`, `life` or `industry` |
 | `-zoom` | 1 | Starting zoom |
 | `-demo-colony` | false | Land and build a small working colony facing the camera |
-| `-demo-heaters` | false | Put fixed warmth on a ring of tiles around the equator (enough to tip the planet into runaway warming) |
+| `-demo-heaters` | false | Put fixed warmth on a ring of tiles around the equator: enough to tip the planet into runaway warming, with forests by about day 1000 (`-demo-steps 10000`) |
 | `-demo-steps` | 0 | Fast-forward this many steps before starting (10 steps = 1 day) |
 | `-width`, `-height` | 1024, 720 | Window size |
 | `-safe-area` | | Simulate phone system bars: `left,top,right,bottom` insets in pixels |

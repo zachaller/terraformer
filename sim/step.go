@@ -36,6 +36,7 @@ func (p *Planet) Step() {
 	p.stepWater()
 	p.stepPollution()
 	p.stepLife()
+	p.stepSpecies()
 	p.Ticks++
 	p.checkGoals()
 }
@@ -166,7 +167,7 @@ func (p *Planet) stepLife() {
 		}
 		avg /= 4
 		l += lifeGrowth*l*(1-l) + lifeSpread*avg*(1-l)
-		if l == 0 && p.chance(idx) < lifeEmerge {
+		if l == 0 && p.chance(idx, 0) < lifeEmerge {
 			l = lifeSeed
 		}
 		p.nextLife[idx] = math.Min(l, 1)
@@ -177,9 +178,9 @@ func (p *Planet) stepLife() {
 }
 
 // chance returns a deterministic pseudo-random number in [0, 1) for tile idx
-// on the current tick.
-func (p *Planet) chance(idx int) float64 {
-	return (hash3(p.Seed, int64(p.Ticks), int64(idx), 0x11fe) + 1) / 2
+// on the current tick. Different salts give independent streams.
+func (p *Planet) chance(idx, salt int) float64 {
+	return (hash3(p.Seed^uint64(salt)*0x9E3779B97F4A7C15, int64(p.Ticks), int64(idx), 0x11fe) + 1) / 2
 }
 
 // AddHeat warms the tile at c and, by half as much, its neighbours, as a

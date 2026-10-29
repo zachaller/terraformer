@@ -159,6 +159,17 @@ capacity-limited routing turns out to matter for gameplay.
   1% life ~8 min, 2 kPa ~13 min, thaw ~19 min, living world ~20 min. A human
   is slower; the test fails if the planet becomes trivially easy to thaw.
 
+### Life stages (after step 5)
+
+`sim/life.go`: each tile has a density per species after microbes. A
+species can only appear on a tile where the one before it in its chain is
+established (density 0.5), then grows logistically, spreads to neighbours,
+and dies back when conditions fail. Land: moss (above 0°, 1 kPa), grass
+(5°, 8 kPa), shrubs (8°, 20 kPa), forest (10°, 35 kPa), all needing damp
+but not flooded ground. Water (standing water 0.2+): plankton (2°), fish
+(8°, 20 kPa). Goals for moss, the seas, grasslands and forests extend the
+playthrough; the bot reaches forests at about 26 minutes at 1x.
+
 ## Play Store checklist (for later)
 
 - Google Play developer account (one-time $25 fee).

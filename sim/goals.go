@@ -66,6 +66,13 @@ var Goals = []Goal{
 		},
 	},
 	{
+		Name: "First moss",
+		Hint: "Where microbes are established and the air passes 1 kPa, moss can take root. Inspect a tile to see what it needs",
+		Progress: func(p *Planet) float64 {
+			return boolProgress(p.SpeciesCover(Moss) > 0)
+		},
+	},
+	{
 		Name: "Thaw",
 		Hint: "Keep melting ice. With enough CO2 the planet warms itself. Get the average temperature above 0C",
 		Progress: func(p *Planet) float64 {
@@ -77,6 +84,27 @@ var Goals = []Goal{
 		Hint: "Let microbes flourish: average life across the planet of 50%",
 		Progress: func(p *Planet) float64 {
 			return p.Stats().LifeMean / 0.5
+		},
+	},
+	{
+		Name: "Life in the seas",
+		Hint: "Plankton fills warm standing water; fish follow once the air passes 20 kPa. Get fish into 1% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Fish) / 0.01
+		},
+	},
+	{
+		Name: "Grasslands",
+		Hint: "Grass follows moss once it's above 5° and the air passes 8 kPa. Grow grass on 5% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Grass) / 0.05
+		},
+	},
+	{
+		Name: "Forests",
+		Hint: "Shrubs grow from grass, then forests from shrubs once the air passes 35 kPa. Grow forest on 2% of the planet",
+		Progress: func(p *Planet) float64 {
+			return p.SpeciesCover(Forest) / 0.02
 		},
 	},
 }

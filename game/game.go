@@ -26,7 +26,7 @@ var planetShaderSrc []byte
 var lightDir = sim.Vec3{X: -0.5, Y: 0.5, Z: 0.75}.Normalize()
 
 // demoHeat is how much each demo heater warms its tile, in °C.
-const demoHeat = 30
+const demoHeat = 40
 
 // messageTime is how long a message stays on screen, in seconds.
 const messageTime = 4

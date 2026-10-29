@@ -88,6 +88,40 @@ regular check-ins on feel and performance.
   microbes → lichen/moss → grass → shrubs → forest on land; plankton → fish in
   water; animals once there's enough plant life to feed them. Each stage has a
   habitable range of conditions defined in `content/`.
+- **Resource economy (Factorio-lite).** Machines cost materials to build and
+  consume inputs to run. Loop: extract → process → build/run machines → planet
+  changes → new resources unlock.
+- **Industry vs. ecology.** Mines scar tiles and factories pollute nearby, which
+  works against the life the player is growing. Placement is the puzzle. A
+  self-sustaining ecosystem lets the player shut polluting machines down.
+
+### Resources (first draft)
+
+| Tier | Resources | Source |
+|---|---|---|
+| Raw | Ore, ice, carbon rock, silicates | Mining tiles; deposits are scattered, so location matters |
+| Processed | Metal, water, oxygen, hydrogen, components | Factories (e.g. smelter: ore → metal; electrolyser: water → O₂ + H₂) |
+| Energy | Power | Solar early; wind once there's atmosphere; geothermal near volcanic tiles; biofuel once there's life |
+| Living | Biomass, wood | Harvested from grown life; over-harvesting makes it die back |
+
+### Logistics: networks, not belts
+
+- The player **drags a link** between buildings to connect them. Connected
+  buildings form a **network**, and resources flow through it automatically.
+- Each link has a **capacity** (units per tick) and a cost that grows with
+  length, so distance and layout still matter.
+- Buildings have small input/output buffers; production stalls when inputs run
+  dry or outputs back up, which makes bottlenecks visible.
+- Power travels on the same networks (or a parallel power layer; decide during
+  prototyping).
+- Conveyor belts are deliberately left out: fiddly with fingers on a rotating
+  globe. They may be added later as an optional extra.
+
+**Simulation:** each tick, `sim/` finds connected networks (a graph), then
+distributes supply to demand within each network, respecting link capacities
+and processing buildings in a fixed order so results stay deterministic. A simple
+greedy pass is enough to start; a proper max-flow solver is only needed if
+capacity-limited routing turns out to matter for gameplay.
 
 ## Play Store checklist (for later)
 
@@ -106,9 +140,12 @@ regular check-ins on feel and performance.
 2. **Globe prototype on a phone:** same thing via `ebitenmobile`; check feel and
    frame rate.
 3. **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
-4. **First playable:** place one or two buildings, watch the planet change.
-5. **Content and polish:** more buildings, biomes, art, audio, UI.
-6. **Release pipeline:** CI AAB build, closed test, Play Store listing.
+4. **Economy core:** a mine, a smelter, a power source and links between them;
+   network flow in `sim/` with tests.
+5. **First playable:** build a small production chain that powers one
+   terraforming machine, and watch the planet change and the first life appear.
+6. **Content and polish:** more buildings, biomes, art, audio, UI.
+7. **Release pipeline:** CI AAB build, closed test, Play Store listing.
 
 ## Open design questions
 

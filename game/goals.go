@@ -102,10 +102,37 @@ func (g *Game) goalsList(u *ui, x, y, w float64) float64 {
 	u.area(x+w-44, y-8, 44, 44, func() { g.goalsOpen = false })
 	y += 40
 
-	current, prog, _ := p.CurrentGoal()
-	for i, goal := range sim.Goals {
-		done := i < p.GoalsDone()
-		if goal.Name == current.Name && !done {
+	// Only a window of the list fits on a phone: a summary of the goals
+	// done, the last two of them, the current goal expanded, and the next
+	// few.
+	const shownDone, shownNext = 2, 4
+	done := p.GoalsDone()
+	first := max(done-shownDone, 0)
+	last := min(done+shownNext, len(sim.Goals)-1)
+	row := func(label string, check, faded bool) {
+		rowH := 38.0
+		dotX, dotY := x+11, y+rowH/2
+		col := color.Color(rgba(0x8C98AC))
+		if check {
+			u.circle(dotX, dotY, 11, rgba(0x164A42))
+			u.icon(iconCheck, dotX-7, dotY-7, 14, colTealTx)
+		} else if u.drawing() {
+			u.strokeRound(dotX-10, dotY-10, 20, 20, 10, 2, rgba(0x3A4658))
+		}
+		if faded {
+			col = colMuted
+		}
+		u.text(label, x+34, y+(rowH-u.lineH(sans, 13, regular))/2, sans, 13, regular, col)
+		u.fillRound(x, y+rowH-1, w, 1, 0, rgba(0x1F2836))
+		y += rowH
+	}
+	if first > 0 {
+		row(fmt.Sprintf("%d earlier goals done", first), true, true)
+	}
+	_, prog, ok := p.CurrentGoal()
+	for i := first; i <= last; i++ {
+		goal := sim.Goals[i]
+		if i == done && ok {
 			// The current goal: expanded, with hint and progress.
 			inner := w - 24
 			measure := func() float64 {
@@ -121,21 +148,10 @@ func (g *Game) goalsList(u *ui, x, y, w float64) float64 {
 			y += h + 4
 			continue
 		}
-		rowH := 38.0
-		dotX, dotY := x+11, y+rowH/2
-		col := color.Color(rgba(0x8C98AC))
-		if done {
-			u.circle(dotX, dotY, 11, rgba(0x164A42))
-			u.icon(iconCheck, dotX-7, dotY-7, 14, colTealTx)
-			col = colMuted
-		} else if u.drawing() {
-			u.strokeRound(dotX-10, dotY-10, 20, 20, 10, 2, rgba(0x3A4658))
-		}
-		u.text(goal.Name, x+34, y+(rowH-u.lineH(sans, 13, regular))/2, sans, 13, regular, col)
-		if i < len(sim.Goals)-1 {
-			u.fillRound(x, y+rowH-1, w, 1, 0, rgba(0x1F2836))
-		}
-		y += rowH
+		row(goal.Name, i < done, i < done)
+	}
+	if more := len(sim.Goals) - 1 - last; more > 0 {
+		row(fmt.Sprintf("%d more after that", more), false, true)
 	}
 	return y - y0
 }

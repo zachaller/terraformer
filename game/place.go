@@ -57,14 +57,14 @@ func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) previewRow {
 	via, ok, colony := p.Connection(bt, c)
 	switch {
 	case ok && colony:
-		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to the colony via the " + lower(p.BuildingAt(via).Spec().Name), colTeal}
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "via the " + lower(p.BuildingAt(via).Spec().Name), colTeal}
 	case ok:
-		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to a network that doesn't reach the colony", colAmber}
+		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "not to the colony", colAmber}
 	}
 	if bt == sim.Pylon {
-		return previewRow{iconLink, colAmber, "Connects", "to nothing yet: no hub within 10 tiles", colAmber}
+		return previewRow{iconLink, colAmber, "Connects", "no hub within 10 tiles", colAmber}
 	}
-	return previewRow{iconLink, colAmber, "Connects", "to nothing: needs a pylon within 4 tiles", colAmber}
+	return previewRow{iconLink, colAmber, "Not connected", "needs a pylon within 4", colAmber}
 }
 
 // maxAreaCells is the most tiles a placement preview tints: four rings of
@@ -323,7 +323,17 @@ func (g *Game) placementPanel(u *ui, left, right, bottom float64) float64 {
 	rows, warning := g.placementPreview(bt, c)
 	inner := right - left - 28
 	rowH := 26.0
-	h := 14 + float64(len(rows))*rowH
+	// A value too long to sit beside its label goes on a line of its own.
+	wraps := func(r previewRow) bool {
+		return u.textW(r.label, sans, 13, regular)+26+12+u.textW(r.value, mono, 12, semibold) > inner
+	}
+	h := 14.0
+	for _, r := range rows {
+		h += rowH
+		if wraps(r) {
+			h += 18
+		}
+	}
 	note, noteFill, noteBorder, noteFg := warning, color.Color(rgba(0x2A1E26)), color.Color(rgba(0x5B3B52)), color.Color(rgba(0xF0D2E6))
 	if err != nil {
 		note, noteFill, noteBorder, noteFg = err.Error(), colRedBg, colRedLn, rgba(0xFFC9C0)
@@ -344,6 +354,9 @@ func (g *Game) placementPanel(u *ui, left, right, bottom float64) float64 {
 	for _, r := range rows {
 		u.icon(r.icon, x, y+(rowH-16)/2, 16, r.iconC)
 		u.text(r.label, x+26, y+(rowH-u.lineH(sans, 13, regular))/2, sans, 13, regular, colIcon)
+		if wraps(r) {
+			y += 18
+		}
 		u.textRight(r.value, x+inner, y+(rowH-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, r.valueC)
 		y += rowH
 	}

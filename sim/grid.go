@@ -23,8 +23,12 @@ import (
 // conformal cubed-sphere mapping of Rančić, Purser and Mesinger (1996), which
 // keeps tiles square (no shearing) everywhere and makes grid lines cross the
 // seams between faces at right angles, so rows run straight on from one face
-// to the next. The cost is that tiles shrink towards the eight cube corners:
-// the corner tile has about a ninth of the area of a face-centre one.
+// to the next. On its own, though, it shrinks tiles towards the eight cube
+// corners to almost nothing (the corner tile would have about a ninth of the
+// area of a face-centre one), so the grid is also stretched radially around
+// each corner (cornerWarp). That keeps rows meeting seams at right angles,
+// and brings the corner tile up to about 70% of a face-centre tile, at the
+// cost of some skew (up to about 25°) in the tiles nearest the corners.
 //
 // game/planet.kage repeats this mapping (faceUV and dirFromFaceUV); keep
 // them in sync.
@@ -193,7 +197,8 @@ func faceUV(d Vec3) (face int, u, v float64) {
 	z := 2 * cmplx.Pow(series(confB[:], -w*w*w), 0.25)
 	// z is (1-a) + i(1-b) up to a quarter turn, which the folding undoes.
 	p, q := math.Abs(real(z)), math.Abs(imag(z))
-	u, v = unfold(1-min(p, q), 1-max(p, q), x, y, swap)
+	a, b = cornerUnwarp(1-min(p, q), 1-max(p, q))
+	u, v = unfold(a, b, x, y, swap)
 	return face, u, v
 }
 
@@ -201,6 +206,7 @@ func faceUV(d Vec3) (face int, u, v float64) {
 // through (u, v) on face. u and v must be in [-1, 1].
 func dirFromFaceUV(face int, u, v float64) Vec3 {
 	a, b, swap := octant(u, v)
+	a, b = cornerWarp(a, b)
 	z := complex(1-a, 1-b) / 2
 	w := series(confA[:], z*z*z*z)
 	w = cmplx.Exp(complex(0, math.Pi/6)) * cmplx.Pow(w*1i, 1.0/3)
@@ -209,6 +215,55 @@ func dirFromFaceUV(face int, u, v float64) Vec3 {
 	eu, ev, en := faceAxes(face)
 	// Inverse stereographic projection, scaled by (1 + |w|²)/2.
 	return eu.Scale(x).Add(ev.Scale(y)).Add(en.Scale((1 - x*x - y*y) / 2))
+}
+
+// cornerGamma sets how strongly cornerWarp enlarges tiles near cube corners:
+// 1 leaves the conformal grid alone; 4/3 cancels its shrinking exactly at
+// the corner; more makes corner tiles larger still.
+const cornerGamma = 1.5
+
+// cornerWarp maps a grid position (a, b), folded so that 0 ≤ b ≤ a ≤ 1,
+// to the conformal position it shows. Within distance 1 of the corner (1, 1)
+// it moves points away from the corner along the line to it, by a radius
+// map whose inverse is cornerSigma; further out it does nothing. Moving
+// points only along lines through the corner keeps the face's edges in
+// place and the grid symmetric, so rows still cross seams at right angles.
+func cornerWarp(a, b float64) (float64, float64) {
+	p, q := 1-a, 1-b
+	t := math.Hypot(p, q)
+	if t >= 1 || t == 0 {
+		return a, b
+	}
+	// Invert cornerSigma by Newton's method.
+	x := math.Pow(t, 1/cornerGamma)
+	for range 6 {
+		x -= (cornerSigma(x) - t) / cornerSigmaSlope(x)
+	}
+	k := x / t
+	return 1 - p*k, 1 - q*k
+}
+
+// cornerUnwarp is the inverse of cornerWarp.
+func cornerUnwarp(a, b float64) (float64, float64) {
+	p, q := 1-a, 1-b
+	t := math.Hypot(p, q)
+	if t >= 1 || t == 0 {
+		return a, b
+	}
+	k := cornerSigma(t) / t
+	return 1 - p*k, 1 - q*k
+}
+
+// cornerSigma maps distance from the corner on the conformal grid to
+// distance on the tile grid: about x^γ near the corner, and matching x (in
+// value and slope) at 1.
+func cornerSigma(x float64) float64 {
+	return math.Pow(x, cornerGamma) * (1 + (cornerGamma-1)*(1-x))
+}
+
+func cornerSigmaSlope(x float64) float64 {
+	const g = cornerGamma
+	return math.Pow(x, g-1) * (g*g - (g*g-1)*x)
 }
 
 // faceAxes returns the directions of increasing u and v on face, and its

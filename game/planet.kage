@@ -58,11 +58,42 @@ func faceUV(d vec3) vec3 {
 	// Any fourth root will do: the folding below undoes the quarter turns.
 	ang := atan2(s.y, s.x) / 4
 	z := abs(2 * sqrt(sqrt(length(s))) * vec2(cos(ang), sin(ang)))
-	uv := 1 - vec2(min(z.x, z.y), max(z.x, z.y))
+	uv := cornerUnwarp(1 - vec2(min(z.x, z.y), max(z.x, z.y)))
 	if swap {
 		uv = uv.yx
 	}
 	return vec3(f.x, uv*sign(f.yz))
+}
+
+// cornerWarp, cornerUnwarp and cornerSigma mirror sim's: they enlarge tiles
+// near cube corners.
+const cornerGamma = 1.5
+
+func cornerSigma(x float) float {
+	return pow(x, cornerGamma) * (1 + (cornerGamma-1)*(1-x))
+}
+
+func cornerUnwarp(ab vec2) vec2 {
+	p := 1 - ab
+	t := length(p)
+	if t >= 1 || t == 0 {
+		return ab
+	}
+	return 1 - p*cornerSigma(t)/t
+}
+
+func cornerWarp(ab vec2) vec2 {
+	p := 1 - ab
+	t := length(p)
+	if t >= 1 || t == 0 {
+		return ab
+	}
+	x := pow(t, 1/cornerGamma)
+	for i := 0; i < 6; i++ {
+		slope := pow(x, cornerGamma-1) * (cornerGamma*cornerGamma - (cornerGamma*cornerGamma-1)*x)
+		x -= (cornerSigma(x) - t) / slope
+	}
+	return 1 - p*x/t
 }
 
 const confRa = 0.7320508075688772 // √3 - 1
@@ -101,7 +132,7 @@ func dirFromFaceUV(face float, u float, v float) vec3 {
 	if swap {
 		a = a.yx
 	}
-	z := (1 - a) / 2
+	z := (1 - cornerWarp(a)) / 2
 	z = cmul(z, z)
 	x := cmul(z, z)
 	s := cmul(vec2(-0.00235481488325, 0), x)

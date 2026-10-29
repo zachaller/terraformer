@@ -56,10 +56,15 @@ coefficients from their Table B1 (as reproduced in
 [CubedSphere.jl](https://github.com/CliMA/CubedSphere.jl)). Conformal means
 tiles are square rather than sheared, and grid lines cross the seams between
 faces at right angles, so rows carry on straight from one face to the next.
-The trade-off is tile size: tiles shrink towards the corners (the corner
-tile has about a ninth of the area of a face-centre tile, the next one a
-fifth). The earlier equal-angle mapping kept sizes within about 25% but bent
-every row at the seams.
+On its own the conformal mapping shrinks tiles towards the corners to almost
+nothing (the corner tile would have about a ninth of the area of a
+face-centre tile), so the grid is also stretched radially around each corner
+(`cornerWarp` in `sim/grid.go`). Because that only moves points along lines
+through the corner, rows still cross seams at right angles; the corner tile
+ends up at about 70% of a face-centre tile, and every tile is within a
+factor of about 1.6 of every other, at the cost of up to about 25° of skew
+in the tiles nearest the corners. The earlier equal-angle mapping had
+similar sizes and skew but bent every row at the seams.
 
 **This is the biggest technical risk, so it's the first prototype.**
 

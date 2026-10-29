@@ -157,7 +157,8 @@ func TestConformalSeries(t *testing.T) {
 }
 
 func TestConformalRightAngles(t *testing.T) {
-	// Grid lines cross at right angles everywhere, including across seams.
+	// Grid lines cross at right angles everywhere outside the corner warp,
+	// including across seams.
 	g := Grid{N: 16}
 	for idx := range g.NumCells() {
 		c := g.CellAt(idx)
@@ -171,9 +172,44 @@ func TestConformalRightAngles(t *testing.T) {
 	}
 }
 
-// nearCorner reports whether c touches a cube corner, where three faces meet
-// and the grid can't be square.
+// nearCorner reports whether c is within cornerWarp's reach of a cube
+// corner, or on a neighbouring face just past it.
 func nearCorner(g Grid, c Cell) bool {
-	edge := func(k int) bool { return k == 0 || k == g.N-1 }
-	return edge(c.I) && edge(c.J)
+	from := func(k int) float64 {
+		t := (float64(k)+0.5)/float64(g.N)*2 - 1
+		return 1 - math.Abs(t) - 2/float64(g.N)
+	}
+	return math.Hypot(max(from(c.I), 0), max(from(c.J), 0)) < 1
+}
+
+func TestCornerWarp(t *testing.T) {
+	for i := range 21 {
+		for j := range i + 1 {
+			a, b := float64(i)/20, float64(j)/20
+			wa, wb := cornerWarp(a, b)
+			if ua, ub := cornerUnwarp(wa, wb); math.Abs(ua-a) > 1e-9 || math.Abs(ub-b) > 1e-9 {
+				t.Errorf("cornerUnwarp(cornerWarp(%v, %v)) = %v, %v", a, b, ua, ub)
+			}
+			if wb > wa+1e-12 || wa > 1 || wb < 0 {
+				t.Errorf("cornerWarp(%v, %v) = %v, %v leaves the triangle", a, b, wa, wb)
+			}
+		}
+	}
+	// Tile areas stay within a factor of about 2 of each other.
+	g := Grid{N: 32}
+	area := func(i, j int) float64 {
+		p := func(i, j int) Vec3 {
+			return dirFromFaceUV(4, float64(i)/16-1, float64(j)/16-1).Normalize()
+		}
+		a, b, c, d := p(i, j), p(i+1, j), p(i, j+1), p(i+1, j+1)
+		return b.Sub(a).Cross(c.Sub(a)).Len() + b.Sub(d).Cross(c.Sub(d)).Len()
+	}
+	centre := area(g.N/2, g.N/2)
+	for i := range g.N {
+		for j := range g.N {
+			if r := area(i, j) / centre; r < 0.55 || r > 1.2 {
+				t.Errorf("tile %d,%d has %.2f times the area of a centre tile", i, j, r)
+			}
+		}
+	}
 }

@@ -232,7 +232,7 @@ func (g *Game) Update() error {
 		}
 	}
 
-	if g.focus != nil && g.cam.turnTowards(g.planet.Grid.DirFromCell(*g.focus), 0.15) {
+	if g.focus != nil && g.cam.turnTowards(g.planet.Dir(*g.focus), 0.15) {
 		g.focus = nil
 	}
 
@@ -484,9 +484,9 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		}
 		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
 	}
-	gridAt, gridFace := []float32{0, 0, 0}, float32(0)
+	gridAt := []float32{0, 0, 0}
 	if c := g.highlighted(); c != nil {
-		gridAt, gridFace = vec3f(g.planet.Grid.DirFromCell(*c)), float32(c.Face)
+		gridAt = vec3f(g.planet.Dir(*c))
 	}
 	op := &ebiten.DrawTrianglesShaderOptions{}
 	op.Images[0] = g.atlas
@@ -502,7 +502,6 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Light":     vec3f(lightDir),
 		"Grid":      float32(g.gridAmount()),
 		"GridAt":    gridAt,
-		"GridFace":  gridFace,
 		"Ghost":     ghost,
 		"GhostType": ghostType,
 		"GhostOK":   ghostOK,
@@ -541,8 +540,8 @@ func (g *Game) drawLinks(screen *ebiten.Image) {
 	p := g.planet
 	s := float32(ebiten.Monitor().DeviceScaleFactor())
 	for _, l := range p.Links() {
-		a := p.Grid.DirFromCell(p.Grid.CellAt(l[0]))
-		b := p.Grid.DirFromCell(p.Grid.CellAt(l[1]))
+		a := p.Dir(p.Grid.CellAt(l[0]))
+		b := p.Dir(p.Grid.CellAt(l[1]))
 		clr := color.RGBA{90, 220, 255, 255}
 		if p.NetworkOf(p.BuildingAt(p.Grid.CellAt(l[0]))).PowerSatisfaction() < 1 {
 			clr = color.RGBA{255, 150, 40, 255}

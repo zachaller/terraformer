@@ -12,7 +12,7 @@ import (
 func placeDemoHeaters(p *sim.Planet) {
 	for idx := range p.Tiles {
 		c := p.Grid.CellAt(idx)
-		if d := p.Grid.DirFromCell(c); math.Abs(d.Y) < 0.05 && idx%3 == 0 {
+		if d := p.Dir(c); math.Abs(d.Y) < 0.05 && idx%3 == 0 {
 			p.AddHeat(c, demoHeat)
 		}
 	}

@@ -77,7 +77,7 @@ func (b *bot) land() {
 	p := b.p
 	// The ore tile nearest the equator, then the nearest ore-free tile to it.
 	ore, ok := b.nearest(p.Grid.CellFromDir(Vec3{X: 1}), 100, func(c Cell, t Tile) bool {
-		return t.Ore > 0 && math.Abs(p.Grid.DirFromCell(c).Y) < 0.3
+		return t.Ore > 0 && math.Abs(p.Dir(c).Y) < 0.3
 	})
 	if !ok {
 		b.t.Fatal("no ore near the equator")
@@ -110,8 +110,9 @@ func (b *bot) act() {
 			_ = p.Demolish(p.Grid.CellAt(bl.Tile))
 		}
 	}
-	// Keep one mine per smelter.
-	for b.count(Mine) < max(b.count(Smelter), 1) && b.metal() >= Specs[Mine].Cost+4 {
+	// Keep one mine per smelter, keeping some metal in reserve unless there
+	// are no mines left at all.
+	for n := b.count(Mine); n < max(b.count(Smelter), 1) && (b.metal() >= Specs[Mine].Cost+4 || n == 0 && b.metal() >= Specs[Mine].Cost+1); n = b.count(Mine) {
 		c, ok := b.nearest(b.lander, MaxLinkLength-1, func(c Cell, t Tile) bool { return t.Ore > 0 })
 		if !ok || !b.build(Mine, c) {
 			break
@@ -135,12 +136,13 @@ func (b *bot) act() {
 			b.build(Smelter, c)
 		}
 	}
-	// Heaters on icy, clean ground away from industry, spaced out.
-	for b.metal() >= Specs[HeaterMachine].Cost+2*Specs[SolarPanel].Cost+4 {
+	// Heaters on icy, clean ground away from industry, spaced out, keeping
+	// enough metal to replace a mine that runs dry.
+	for b.metal() >= Specs[HeaterMachine].Cost+2*Specs[SolarPanel].Cost+Specs[Mine].Cost+1 {
 		c, ok := b.nearest(b.lander, 60, func(c Cell, t Tile) bool {
 			return t.Ice > 0 && t.Ore == 0 && t.Pollution < 0.02 &&
 				b.distToType(c, Mine, Smelter) > 4 && b.distToType(c, HeaterMachine) > 2.5 &&
-				math.Abs(p.Grid.DirFromCell(c).Y) < 0.6
+				math.Abs(p.Dir(c).Y) < 0.6
 		})
 		if !ok || !b.build(HeaterMachine, c) {
 			break

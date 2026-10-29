@@ -74,6 +74,7 @@ type Planet struct {
 	Ticks uint64
 
 	neighbors [][4]int32 // indices of each tile's four neighbours
+	dirs      []Vec3     // unit direction through each tile's centre
 	cosLat    []float64  // cosine of each tile's latitude
 	// co2PerIce is how much atmosphere (kPa) melting one unit of ice
 	// releases, scaled so melting all the starting ice adds maxReleasedCO2.
@@ -107,6 +108,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 		Tiles:      make([]Tile, cells),
 		Atmosphere: startAtmosphere,
 		neighbors:  make([][4]int32, cells),
+		dirs:       make([]Vec3, cells),
 		cosLat:     make([]float64, cells),
 		nextTemp:   make([]float64, cells),
 		nextLife:   make([]float64, cells),
@@ -121,6 +123,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 			p.neighbors[idx][k] = int32(g.Index(nb))
 		}
 		d := g.DirFromCell(c)
+		p.dirs[idx] = d
 		p.cosLat[idx] = math.Sqrt(1 - d.Y*d.Y)
 
 		h := fbm(seed, d.Scale(2.2), 5)
@@ -135,6 +138,10 @@ func NewPlanet(n int, seed uint64) *Planet {
 	p.startAvgTemp = p.Stats().AvgTemp
 	return p
 }
+
+// Dir is the unit direction through the centre of c, like Grid.DirFromCell
+// but precomputed.
+func (p *Planet) Dir(c Cell) Vec3 { return p.dirs[p.Grid.Index(c)] }
 
 // Tile returns the tile at c.
 func (p *Planet) Tile(c Cell) Tile { return p.Tiles[p.Grid.Index(c)] }

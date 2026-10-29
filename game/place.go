@@ -277,7 +277,7 @@ func (g *Game) drawLinkPreview(screen *ebiten.Image) {
 	}
 	p := g.planet
 	s := ebiten.Monitor().DeviceScaleFactor()
-	a := p.Grid.DirFromCell(d.from)
+	a := p.Dir(d.from)
 
 	// Reach: a dashed circle MaxLinkLength tiles around the source.
 	reach := sim.MaxLinkLength * (math.Pi / 2 / float64(p.Grid.N))

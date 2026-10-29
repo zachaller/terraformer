@@ -53,7 +53,7 @@ func (g *Game) inspectContent(u *ui, x, y, w float64) float64 {
 		u.fillRound(x, y, 44, 44, 12, color.RGBA{uint8(col[0]), uint8(col[1]), uint8(col[2]), 255})
 	}
 	name := t.Kind().String()
-	sub := latitude(p.Grid.DirFromCell(c))
+	sub := latitude(p.Dir(c))
 	if b != nil {
 		name = b.Spec().Name
 		sub = t.Kind().String() + " · " + sub

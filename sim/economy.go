@@ -181,7 +181,7 @@ func (p *Planet) Demolish(c Cell) error {
 // LinkLength is the distance between the centres of tiles a and b, in tile
 // widths.
 func (p *Planet) LinkLength(a, b Cell) float64 {
-	da, db := p.Grid.DirFromCell(a), p.Grid.DirFromCell(b)
+	da, db := p.Dir(a), p.Dir(b)
 	angle := math.Acos(math.Min(da.Dot(db), 1))
 	return angle / (math.Pi / 2 / float64(p.Grid.N))
 }

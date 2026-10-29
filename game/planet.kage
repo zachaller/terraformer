@@ -24,7 +24,6 @@ var Time float    // seconds
 var Light vec3    // unit light direction, view space
 var Grid float    // tile grid line strength, 0 to hide
 var GridAt vec3   // planet-space centre of the patch where grid lines show
-var GridFace float // cube face of the tile at GridAt
 
 // A building being placed: its cell (face < 0 means none), type + 1, whether
 // the spot is valid, and the cells it would heat or pollute (unused entries
@@ -36,11 +35,43 @@ var Area [12]vec3
 var AreaTint vec3
 
 // faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1], on
-// the equal-angle grid.
+// the conformal grid (see sim/grid.go for how the mapping works; the series
+// here are cut to eight terms, accurate to about 1e-6).
 func faceUV(d vec3) vec3 {
 	f := cubeFaceUV(d)
-	return vec3(f.x, atan(f.yz)*4/3.14159265)
+	a := abs(f.yz)
+	swap := a.y > a.x
+	if swap {
+		a = a.yx
+	}
+	w := a / (1 + sqrt(1+dot(a, a)))
+	w = cdiv(cmul(w, confCb())+vec2(confRa, 0), vec2(1, 0)-cmul(w, confCc()))
+	x := -cmul(cmul(w, w), w)
+	s := cmul(vec2(0.0077486899640560845, 0), x)
+	s = cmul(s+vec2(0.0099887332318051442, 0), x)
+	s = cmul(s+vec2(0.01342565621117456, 0), x)
+	s = cmul(s+vec2(0.019124473040277028, 0), x)
+	s = cmul(s+vec2(0.02965810434051968, 0), x)
+	s = cmul(s+vec2(0.053171781346679235, 0), x)
+	s = cmul(s+vec2(0.11847293456554467, 0), x)
+	s = cmul(s+vec2(0.67698819751738992, 0), x)
+	// Any fourth root will do: the folding below undoes the quarter turns.
+	ang := atan2(s.y, s.x) / 4
+	z := abs(2 * sqrt(sqrt(length(s))) * vec2(cos(ang), sin(ang)))
+	uv := 1 - vec2(min(z.x, z.y), max(z.x, z.y))
+	if swap {
+		uv = uv.yx
+	}
+	return vec3(f.x, uv*sign(f.yz))
 }
+
+const confRa = 0.7320508075688772 // √3 - 1
+
+func confCb() vec2 { return vec2(-1, 1) }
+func confCc() vec2 { return vec2(-1, 1) * confRa / 2 }
+
+func cmul(a, b vec2) vec2 { return vec2(a.x*b.x-a.y*b.y, a.x*b.y+a.y*b.x) }
+func cdiv(a, b vec2) vec2 { return vec2(a.x*b.x+a.y*b.y, a.y*b.x-a.x*b.y) / dot(b, b) }
 
 func cubeFaceUV(d vec3) vec3 {
 	a := abs(d)
@@ -62,10 +93,35 @@ func cubeFaceUV(d vec3) vec3 {
 	return vec3(5, -d.x/a.z, d.y/a.z)
 }
 
-// dirFromFaceUV mirrors sim.dirFromFaceUV: the cube point for (face, u, v)
-// on the equal-angle grid.
+// dirFromFaceUV mirrors sim.dirFromFaceUV: a direction (not unit length)
+// through (u, v) on face, on the conformal grid.
 func dirFromFaceUV(face float, u float, v float) vec3 {
-	return cubeDir(face, tan(u*3.14159265/4), tan(v*3.14159265/4))
+	a := abs(vec2(u, v))
+	swap := a.y > a.x
+	if swap {
+		a = a.yx
+	}
+	z := (1 - a) / 2
+	z = cmul(z, z)
+	x := cmul(z, z)
+	s := cmul(vec2(-0.00235481488325, 0), x)
+	s = cmul(s+vec2(-0.00329251751279, 0), x)
+	s = cmul(s+vec2(-0.00486625437708, 0), x)
+	s = cmul(s+vec2(-0.00791315785221, 0), x)
+	s = cmul(s+vec2(-0.00895883606818, 0), x)
+	s = cmul(s+vec2(-0.05573058001191, 0), x)
+	s = cmul(s+vec2(-0.38183510510174, 0), x)
+	s = cmul(s+vec2(1.47713062600964, 0), x)
+	// w = e^{iπ/6}·∛(i·s), principal root.
+	ang := atan2(s.x, -s.y)/3 + 0.5235987755982988
+	w := pow(length(s), 1.0/3) * vec2(cos(ang), sin(ang))
+	w = cdiv(w-vec2(confRa, 0), confCb()+cmul(confCc(), w))
+	if swap {
+		w = w.yx
+	}
+	w *= sign(vec2(u, v))
+	en := cubeDir(face, 0, 0)
+	return cubeDir(face, w.x, w.y) - en + en*(1-dot(w, w))/2
 }
 
 func cubeDir(face float, u float, v float) vec3 {
@@ -95,7 +151,12 @@ func cubeDir(face float, u float, v float) vec3 {
 func tileLocal(d vec3, face float, ij vec2) vec2 {
 	uv := (ij+0.5)/N*2 - 1
 	c := normalize(dirFromFaceUV(face, uv.x, uv.y))
-	size := length(normalize(dirFromFaceUV(face, uv.x+2/N, uv.y)) - c)
+	// Step to the next tile inwards: the mapping only covers the face.
+	step := 2 / N
+	if uv.x > 0 {
+		step = -step
+	}
+	size := length(normalize(dirFromFaceUV(face, uv.x+step, uv.y)) - c)
 	up := vec3(0, 1, 0)
 	if abs(c.y) > 0.99 {
 		up = vec3(0, 0, 1)
@@ -327,17 +388,13 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	// Tile grid lines, only while placing things and only in a small patch
 	// (about two tiles) around the last tapped tile, faded out when tiles
-	// are small on screen. Each cube face has its own grid, so rows change
-	// direction at a seam; lines on a different face from the tapped tile
-	// are drawn faintly so the fold there doesn't stand out.
+	// are small on screen. The conformal grid's rows run straight on across
+	// cube seams, so the patch can spill onto the next face.
 	g := fract(st)
 	w := max(fwidth(st), vec2(1e-4))
 	edge := min(min(g.x, 1-g.x)/w.x, min(g.y, 1-g.y)/w.y)
 	lineAmt := 1 - clamp(edge, 0, 1)
 	patch := 1 - smoothstep(1.4*tileAngle, 2.6*tileAngle, length(d-GridAt))
-	if abs(f.x-GridFace) > 0.5 {
-		patch *= 0.3
-	}
 	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.35 * Grid * patch
 	base *= 1 - lineAmt*strength
 

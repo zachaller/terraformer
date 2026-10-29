@@ -18,7 +18,7 @@ Hobby project, targeting release on the Google Play Store.
 | Engine | [Ebitengine](https://ebitengine.org) (v2) | Native Go, mature Android support, games already shipped on Play |
 | Shaders | Kage (Ebitengine's Go-like shader language) | Built in |
 | Planet rendering | 2D "shader globe" | Ebitengine is 2D only; see below |
-| Planet grid | Cube-sphere (6 square grids projected onto a sphere) | Trivial tile lookup in a shader; simple neighbour rules |
+| Planet grid | Cube-sphere (6 square grids projected onto a sphere), conformal mapping | Trivial tile lookup in a shader; simple neighbour rules; square tiles whose rows run straight across face seams |
 | Simulation | Pure Go package, engine-independent | Testable with `go test`; portable if the engine ever changes |
 | Content | Data files (YAML/JSON) for tiles, buildings, rules | Balance without code changes |
 | Android build | `ebitenmobile bind` → `.aar` → thin Android Studio project → AAB | The standard Ebitengine mobile path |
@@ -47,6 +47,19 @@ Ebitengine has no 3D, so the planet is faked:
    when they rotate to the far side.
 
 Tapping does the same maths in Go: screen point → sphere hit → cube face cell.
+
+**Cube to sphere.** A square grid can't cover a sphere evenly: somewhere
+the grid needs points where three rows meet instead of four. A cube-sphere
+puts those at the cube's eight corners. The face grid uses the conformal
+mapping of Rančić, Purser and Mesinger (1996), with the Taylor-series
+coefficients from their Table B1 (as reproduced in
+[CubedSphere.jl](https://github.com/CliMA/CubedSphere.jl)). Conformal means
+tiles are square rather than sheared, and grid lines cross the seams between
+faces at right angles, so rows carry on straight from one face to the next.
+The trade-off is tile size: tiles shrink towards the corners (the corner
+tile has about a ninth of the area of a face-centre tile, the next one a
+fifth). The earlier equal-angle mapping kept sizes within about 25% but bent
+every row at the seams.
 
 **This is the biggest technical risk, so it's the first prototype.**
 

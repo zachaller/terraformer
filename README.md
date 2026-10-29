@@ -13,7 +13,9 @@ shape a barren planet until life takes hold. See
 
 ## Status: first playable (roadmap step 5)
 
-- A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default),
+- A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default,
+  laid out with a conformal mapping so tile rows run straight across the
+  cube's seams),
   rendered as a 2D "shader globe": one screen quad and a Kage shader that
   ray-traces the sphere and looks each pixel up in a tile atlas. Tile colours
   are blended smoothly and broken up with noise, so the planet looks natural

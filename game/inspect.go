@@ -70,10 +70,13 @@ func (g *Game) inspectContent(u *ui, x, y, w float64) float64 {
 	if b != nil {
 		y += g.diagnosis(u, b, x, y, w)
 	}
-	if next, ok := sim.NextSpecies(t); t.Life < 0.5 && !(ok && sim.SpeciesSpecs[next].Aquatic) {
-		y += g.lifeChecklist(u, c, t, x, y, w)
-	} else {
-		y += g.speciesSection(u, t, x, y, w)
+	// Life can't grow under a building, so only bare ground explains it.
+	if b == nil {
+		if next, ok := sim.NextSpecies(t); t.Life < 0.5 && !(ok && sim.SpeciesSpecs[next].Aquatic) {
+			y += g.lifeChecklist(u, c, t, x, y, w)
+		} else {
+			y += g.speciesSection(u, t, x, y, w)
+		}
 	}
 	y += g.tileFacts(u, c, t, x, y, w)
 	if b != nil {
@@ -151,11 +154,12 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	fill, border, fg := color.Color(colAmberBg), color.Color(colAmberLn), color.Color(colAmberTx)
 	switch st.Kind {
 	case sim.StatusRunning:
+		// Nothing to fix: just say what it does, as plain text.
 		msg = runningMessage(p, b)
 		if msg == "" {
 			return 0
 		}
-		fill, border, fg = colCard, rgba(0x2B374A), colBody
+		return u.paragraph(msg, x, y, w, 13, colBody) + 12
 	case sim.StatusLowPower:
 		msg = fmt.Sprintf("Running at %.0f%% because its network is short of power: %.0f supplied, %.0f needed.",
 			st.Supply/st.Demand*100, st.Supply, st.Demand)
@@ -370,34 +374,23 @@ func (g *Game) tileFacts(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) float64
 // networkStats summarises the building's network.
 func (g *Game) networkStats(u *ui, b *sim.Building, x, y, w float64) float64 {
 	n := g.planet.NetworkOf(b)
-	y0 := y
-	u.text("NETWORK", x, y, sans, 11, semibold, colMuted)
-	y += u.lineH(sans, 11, semibold) + 6
-	reach, reachCol := "No", color.Color(colRed)
+	reach, reachCol := "isolated", color.Color(colRed)
 	if n.HasDepot {
-		reach, reachCol = "Yes", colTeal
+		reach, reachCol = "colony", colTeal
 	}
 	spare := n.PowerSupply - n.PowerDemand
 	spareCol := color.Color(colTeal)
 	if spare < 0 {
 		spareCol = colAmber
 	}
-	boxes := []struct {
-		val, label string
-		col        color.Color
-	}{
-		{fmt.Sprint(len(n.Members)), "buildings", colText},
-		{reach, "reaches lander", reachCol},
-		{signed(spare), "power spare", spareCol},
+	members := fmt.Sprintf("%d %s", len(n.Members), plural(len(n.Members), "building", "buildings"))
+	chips := []chip{
+		{parts: []chipPart{iconPart(iconLink, colIcon), numPart(members, colText)}, fill: colCard},
+		{parts: []chipPart{numPart(reach, reachCol)}, fill: colCard},
+		{parts: []chipPart{iconPart(iconBolt, colAmber), numPart(signed(spare), spareCol), labelPart("spare")}, fill: colCard},
 	}
-	bw := (w - 2*gap) / 3
-	for i, bx := range boxes {
-		xx := x + float64(i)*(bw+gap)
-		u.fillRound(xx, y, bw, 52, 12, colCard)
-		u.text(bx.val, xx+10, y+8, mono, 16, semibold, bx.col)
-		u.text(bx.label, xx+10, y+30, sans, 11, regular, colMuted)
-	}
-	return y + 52 - y0 + 14
+	bottom := u.flowChips(chips, x, x+w, y)
+	return bottom - y + 14
 }
 
 func signed(v float64) string {

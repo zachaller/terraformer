@@ -1,6 +1,6 @@
 # Terraformer: Tech Stack & Architecture
 
-Status: decided. Globe prototype (roadmap step 1) is built; see README.md.
+Status: decided. Roadmap steps 1–3 are built; see README.md.
 
 ## The game in one paragraph
 
@@ -66,17 +66,26 @@ terraformer/
 Most development happens on desktop with an instant run loop; the phone is for
 regular check-ins on feel and performance.
 
-## Simulation model (first pass)
+## Simulation model (as built in step 3)
 
-- **Local layer:** per-tile cellular-automaton rules on a fixed tick, e.g.
-  toxic → barren next to a filter; barren → grass next to water; grass spreads.
-- **Global layer:** a few planet stats (temperature, atmosphere, water level),
-  fed by tiles and buildings. Thresholds unlock tile types (e.g. oceans need
-  temperature above 0 °C).
-- **Deterministic:** seeded RNG and a fixed tick, so planets are reproducible and
-  rules are easy to test.
-- **Scale:** a few thousand tiles (e.g. 6 × 32 × 32 ≈ 6,000), which is cheap in
-  plain Go.
+All in `sim/step.go`, deterministic (seeded RNG, fixed tick of 10 steps per
+in-game day at 1x speed), about 0.5 ms per step for 6,144 tiles on desktop.
+
+- **Temperature:** each tile relaxes towards an equilibrium set by latitude,
+  the greenhouse effect (rises with atmospheric pressure), elevation and ice
+  cover (ice reflects sunlight), plus any heater warmth; heat also diffuses to
+  the four neighbours.
+- **Ice and water:** ice melts above 0 °C and water freezes below. The ice
+  holds frozen CO₂, so melting releases atmosphere: the global feedback loop.
+- **Water flow:** water above the soil's retained moisture (0.05) flows to
+  lower neighbours. Pairwise exchange keeps total water exactly conserved.
+- **Life:** microbes appear by chance on tiles that are between -5 and 60 °C
+  with some moisture, grow logistically, spread to neighbours, and die back
+  when conditions turn bad.
+- **Tuning:** all rates are constants at the top of `sim/step.go`;
+  `maxReleasedCO2` in `sim/planet.go` controls how strong the CO₂ feedback is,
+  which decides how easily the planet tips into runaway warming. Currently a
+  ring of ~37 equatorial heaters tips it in about 150 days.
 
 ## Game design decisions
 
@@ -139,7 +148,7 @@ capacity-limited routing turns out to matter for gameplay.
    scroll to zoom, tap to highlight a tile.
 2. ✅ **Globe prototype on a phone:** same thing via `ebitenmobile`; runs smoothly
    at 120 FPS on the developer's phone.
-3. **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
+3. ✅ **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
 4. **Economy core:** a mine, a smelter, a power source and links between them;
    network flow in `sim/` with tests.
 5. **First playable:** build a small production chain that powers one

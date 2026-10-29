@@ -67,3 +67,46 @@ func TestEveryCellReachable(t *testing.T) {
 		}
 	}
 }
+
+func TestNeighborsDistinctAndSymmetric(t *testing.T) {
+	for _, n := range []int{1, 2, 5, 32} {
+		g := Grid{N: n}
+		for idx := range g.NumCells() {
+			c := g.CellAt(idx)
+			nbs := g.Neighbors(c)
+			seen := map[Cell]bool{}
+			for _, nb := range nbs {
+				if nb == c {
+					t.Fatalf("N=%d: %v is its own neighbour", n, c)
+				}
+				if seen[nb] {
+					t.Fatalf("N=%d: %v has duplicate neighbour %v", n, c, nb)
+				}
+				seen[nb] = true
+				back := false
+				for _, nb2 := range g.Neighbors(nb) {
+					back = back || nb2 == c
+				}
+				if !back {
+					t.Fatalf("N=%d: %v neighbours %v but not the reverse", n, c, nb)
+				}
+			}
+		}
+	}
+}
+
+func TestNeighborsAreClose(t *testing.T) {
+	// Neighbours, including across face seams, should be about one cell
+	// apart: never more than ~2 cell widths (in radians) away.
+	g := Grid{N: 32}
+	maxAngle := 2 * (math.Pi / 2) / float64(g.N)
+	for idx := range g.NumCells() {
+		c := g.CellAt(idx)
+		d := g.DirFromCell(c)
+		for _, nb := range g.Neighbors(c) {
+			if a := math.Acos(min(d.Dot(g.DirFromCell(nb)), 1)); a > maxAngle {
+				t.Fatalf("%v and neighbour %v are %.3f rad apart, max %.3f", c, nb, a, maxAngle)
+			}
+		}
+	}
+}

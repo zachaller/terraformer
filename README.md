@@ -4,15 +4,32 @@ A mobile terraforming game in Go with [Ebitengine](https://ebitengine.org):
 shape a barren planet until life takes hold. See
 [docs/tech-stack.md](docs/tech-stack.md) for the design and technical plan.
 
-![Globe prototype](docs/images/globe-prototype.png)
+![Starting planet](docs/images/globe-prototype.png)
+![After warming: seas and microbes](docs/images/terraformed.png)
 
-## Status: globe prototype
+## Status: simulation core (roadmap step 3)
 
-- A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default).
-- Rendered as a 2D "shader globe": one screen quad and a Kage shader that
+- A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default),
+  rendered as a 2D "shader globe": one screen quad and a Kage shader that
   ray-traces the sphere and looks each pixel up in a tile atlas.
-- Drag to rotate (with momentum), mouse wheel or pinch to zoom, click or tap to
-  select a tile.
+- A running climate simulation: temperature by latitude, greenhouse effect,
+  heat spreading between tiles, ice melting and freezing, water flowing
+  downhill, and microbes appearing and spreading where it's warm and wet.
+  Melting ice releases CO₂, which thickens the atmosphere and warms the whole
+  planet: heat enough of it and the planet tips into runaway warming.
+- A temporary **Heater** tool (each tap adds +30 °C to a tile and +15 °C to its
+  neighbours) to experiment with before real machines exist.
+
+### Controls
+
+| Action | Touch | Desktop |
+|---|---|---|
+| Rotate | Drag | Drag with left mouse button |
+| Zoom | Pinch | Mouse wheel |
+| Inspect a tile, or place a heater | Tap | Click |
+| Switch tool (Inspect / Heater) | **Tool** button | `H` |
+| Cycle view (Surface / Temperature / Water / Life) | **View** button | `V` |
+| Cycle speed (Paused / 1x / 4x) | **Speed** button | `Space` pause, `F` fast |
 
 ## Running on desktop
 
@@ -34,6 +51,8 @@ go run ./cmd/desktop -seed 7 -size 64
 |---|---|---|
 | `-seed` | 1 | Planet seed; the same seed always gives the same planet |
 | `-size` | 32 | Tiles per cube-face edge (total tiles = 6 × size²) |
+| `-view` | surface | Starting view: `surface`, `temp`, `water` or `life` |
+| `-demo-steps` | 0 | Place a ring of heaters around the equator and fast-forward this many steps (10 steps = 1 day) |
 | `-screenshot` | | Save a PNG of the first frames to this path and exit |
 
 Headless screenshot (e.g. on a server):
@@ -65,8 +84,8 @@ go test ./...
 ## Layout
 
 ```
-sim/          pure Go simulation: cube-sphere grid, planet generation (no engine imports)
-game/         Ebitengine front end: camera, input, planet shader, HUD
+sim/          pure Go simulation: cube-sphere grid, planet generation, climate/water/life rules (no engine imports)
+game/         Ebitengine front end: camera, input, planet shader, views, buttons, HUD
 cmd/desktop/  desktop entry point
 mobile/       Android entry point, bound by ebitenmobile
 android/      thin Android project (one Activity hosting the game view)

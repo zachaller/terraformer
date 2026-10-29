@@ -13,6 +13,8 @@ func main() {
 	var opts game.Options
 	flag.Uint64Var(&opts.Seed, "seed", 1, "planet seed")
 	flag.IntVar(&opts.GridSize, "size", 32, "tiles per cube face edge")
+	flag.IntVar(&opts.DemoSteps, "demo-steps", 0, "place a ring of equator heaters and fast-forward this many simulation steps")
+	flag.StringVar(&opts.View, "view", "surface", "starting view: surface, temp, water or life")
 	flag.StringVar(&opts.ScreenshotPath, "screenshot", "", "save a PNG of the first frames to this path and exit")
 	flag.Parse()
 

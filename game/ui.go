@@ -59,7 +59,7 @@ var speeds = []struct {
 // buildInfo is the build menu's description of each building.
 var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.SolarPanel:        {"Makes 2 power", "Clean"},
-	sim.Pylon:             {"Connects nearby buildings; joins hubs within 12", "Load 8 · no power"},
+	sim.Pylon:             {"Connects buildings within 4 tiles", "Load 8 · no power"},
 	sim.WindTurbine:       {"Up to 6 power once the air is thick", "Clean"},
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
@@ -530,6 +530,15 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		}
 	}
 	rows := (len(types) + 1) / 2
+	// Cards are tall enough for the longest description in this tab.
+	cw := (w - 28 - gap) / 2
+	for _, bt := range types {
+		was := u.measuring
+		u.measuring = true
+		eh := u.paragraph(buildInfo[bt].effect, 0, 0, cw-20, 12, colBody)
+		u.measuring = was
+		cardH = max(cardH, 46+eh+8+22)
+	}
 	h := 16 + 26 + 12 + 34 + 10 + float64(rows)*cardH + float64(rows-1)*gap + 12 + 40 + 14
 	y := bottom - h
 	u.panel(left, y, w, h, 20, colSheet, colBorder)
@@ -556,7 +565,6 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 	}
 	cy += 34 + 10
 
-	cw := (inner - gap) / 2
 	for i, bt := range types {
 		t := buildTool(bt)
 		spec := sim.Specs[bt]

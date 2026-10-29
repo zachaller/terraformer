@@ -243,8 +243,13 @@ func badge(st float, p vec2, aa float) vec4 {
 	return o
 }
 
+// hash3 is a pseudo-random value in [0, 1) for lattice point p. It avoids
+// sin(): many phone GPUs compute sin() of large arguments inaccurately, which
+// turned the "random" values into visible stripes and blocks.
 func hash3(p vec3) float {
-	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453)
+	q := fract(p * 0.1031)
+	q += dot(q, q.zyx+31.32)
+	return fract((q.x + q.y) * q.z)
 }
 
 // vnoise is 3D value noise in [0, 1]. Evaluated in planet space, so it's
@@ -273,8 +278,11 @@ func smoothColor(d vec3) vec3 {
 	return mix(c0, c1, fr.y)
 }
 
+// hash is hash3 for 2D points (the starfield).
 func hash(p vec2) float {
-	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
+	q := fract(vec3(p.x, p.y, p.x) * 0.1031)
+	q += dot(q, q.yzx+33.33)
+	return fract((q.x + q.y) * q.z)
 }
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
@@ -308,9 +316,13 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// instead of following the grid, then add fine surface texture.
 	tileAngle := 1.5708 / N
 	q3 := d * N * 0.9
+	// Two octaves, so region edges stay irregular even when a single tile
+	// fills much of the screen.
+	q4 := d * N * 3.1
 	warp := vec3(vnoise(q3), vnoise(q3+vec3(17.3, 5.1, 9.7)), vnoise(q3+vec3(41.7, 23.9, 3.3))) - 0.5
+	warp += (vec3(vnoise(q4+vec3(3.7, 11.1, 29.3)), vnoise(q4+vec3(59.1, 7.3, 13.9)), vnoise(q4+vec3(23.3, 37.7, 5.9))) - 0.5) * 0.45
 	base := smoothColor(normalize(d + warp*tileAngle*1.4))
-	detail := vnoise(d*N*2.5)*0.7 + vnoise(d*N*6)*0.3
+	detail := vnoise(d*N*2.5)*0.6 + vnoise(d*N*6)*0.25 + vnoise(d*N*15)*0.15
 	base *= 0.92 + 0.16*detail
 
 	// Tile grid lines, only while placing things and only in a small patch

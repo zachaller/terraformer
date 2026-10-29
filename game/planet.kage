@@ -33,8 +33,8 @@ var GridAt vec3      // planet-space centre of the patch where grid lines show
 var Ghost float
 var GhostType float
 var GhostOK float
-var Area [60]float
-var AreaAmt [60]float
+var Area [90]float
+var AreaAmt [90]float
 var AreaTint vec3
 
 // latticeWarpC and the two warp functions mirror sim's latticeWarp.
@@ -666,7 +666,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	if Area[0] >= 0 {
 		// Tint the tiles the new building would affect, or the inspected
 		// hub covers.
-		for i := 0; i < 60; i++ {
+		for i := 0; i < 90; i++ {
 			if Area[i] == tile {
 				base = mix(base, AreaTint, AreaAmt[i])
 			}

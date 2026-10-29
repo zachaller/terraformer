@@ -5,6 +5,8 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/zachaller/terraformer/sim"
 )
 
@@ -50,6 +52,56 @@ func (g *Game) confirmPlacement() {
 	}
 }
 
+// hubsInReach lists the hubs (pylons and the lander) a hub of type t placed
+// on c would join.
+func (g *Game) hubsInReach(t sim.BuildingType, c sim.Cell) []*sim.Building {
+	p := g.planet
+	var out []*sim.Building
+	for _, b := range p.Buildings() {
+		if b.Spec().Reach > 0 && p.Grid.CellAt(b.Tile) != c && p.Distance(c, p.Grid.CellAt(b.Tile)) <= math.Max(b.Spec().Reach, sim.Specs[t].Reach) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+// drawReach draws the reach of a pylon being placed: a dashed circle as far
+// as it can join other hubs.
+func (g *Game) drawReach(screen *ebiten.Image) {
+	bt, ok := g.placing()
+	if !ok || g.pending == nil || sim.Specs[bt].Reach == 0 {
+		return
+	}
+	p := g.planet
+	s := ebiten.Monitor().DeviceScaleFactor()
+	a := p.Dir(*g.pending)
+	reach := sim.Specs[bt].Reach * p.Grid.TileAngle()
+	ref := sim.Vec3{Y: 1}
+	if math.Abs(a.Y) > 0.9 {
+		ref = sim.Vec3{X: 1}
+	}
+	e1 := a.Cross(ref).Normalize()
+	e2 := a.Cross(e1)
+	pt := func(k int) sim.Vec3 {
+		th := 2 * math.Pi * float64(k) / 96
+		return a.Scale(math.Cos(reach)).Add(e1.Scale(math.Cos(th) * math.Sin(reach))).Add(e2.Scale(math.Sin(th) * math.Sin(reach)))
+	}
+	for i := 0; i < 96; i += 2 {
+		x0, y0, v0 := g.cam.project(pt(i))
+		x1, y1, v1 := g.cam.project(pt(i + 1))
+		if v0 && v1 {
+			vector.StrokeLine(screen, f32(x0), f32(y0), f32(x1), f32(y1), f32(2*s), withAlpha(rgba(0x5AD1F5), 200), true)
+		}
+	}
+}
+
 // isHubType reports whether buildings of type t are network hubs.
 func isHubType(t sim.BuildingType) bool { return sim.Specs[t].Reach > 0 }
 
@@ -66,19 +118,20 @@ func (g *Game) connectionRow(bt sim.BuildingType, c sim.Cell) previewRow {
 		load, capacity := p.HubLoad(hub)
 		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", fmt.Sprintf("via %s · load %.0f/%.0f", lower(hub.Spec().Name), load+math.Max(p.Distance(c, via), 1), capacity), colTeal}
 	case ok && colony:
-		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "to the colony", colTeal}
+		n := len(g.hubsInReach(bt, c))
+		return previewRow{iconLink, rgba(0x5AD1F5), "Joins", fmt.Sprintf("%d %s · the colony", n, plural(n, "hub", "hubs")), colTeal}
 	case ok:
 		return previewRow{iconLink, rgba(0x5AD1F5), "Connects", "not to the colony", colAmber}
 	}
 	if bt == sim.Pylon {
-		return previewRow{iconLink, colAmber, "Connects", "no hub within 10 tiles", colAmber}
+		return previewRow{iconLink, colAmber, "Joins", fmt.Sprintf("no hub within %.0f tiles", sim.Specs[bt].Reach), colAmber}
 	}
 	return previewRow{iconLink, colAmber, "Not connected", "needs a pylon within 4", colAmber}
 }
 
 // maxAreaCells is the most tiles a placement preview tints: four rings of
 // hexes. The shader has arrays of this size.
-const maxAreaCells = 60
+const maxAreaCells = 90
 
 // heatShownMin is the least warming, in °C, a heater preview tints a ring
 // for.
@@ -135,8 +188,14 @@ func (g *Game) placementArea(bt sim.BuildingType, c sim.Cell) ([]areaTint, color
 	case spec.SeedRings > 0:
 		return fade(spec.SeedRings, colTeal)
 	case spec.CoverRadius > 0:
+		// Its cover faintly, and the hubs it would join strongly.
 		for _, a := range areaCells(g.planet.Grid, c, int(spec.CoverRadius)) {
 			out = append(out, areaTint{a.cell, 0.2})
+		}
+		for _, h := range g.hubsInReach(bt, c) {
+			if len(out) < maxAreaCells {
+				out = append(out, areaTint{g.planet.Grid.CellAt(h.Tile), 0.7})
+			}
 		}
 		return out, rgba(0x5AD1F5)
 	case bt == sim.Comet:
@@ -309,7 +368,6 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		rows = append(rows, previewRow{iconLeaf, colTeal, "Seeds life", fmt.Sprintf("up to %d tiles around", spec.SeedRings), colText})
 	case sim.Pylon:
 		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Carries", fmt.Sprintf("load %.0f within %.0f tiles", spec.Capacity, spec.CoverRadius), colText})
-		rows = append(rows, previewRow{iconLink, rgba(0x5AD1F5), "Joins", fmt.Sprintf("pylons and the lander within %.0f tiles", spec.Reach), colText})
 	case sim.CarbonScrubber:
 		rows = append(rows, previewRow{iconAir, colCO2, "Removes", fmt.Sprintf("%.2f kPa a year of CO2", -spec.Emits.CO2*3650), colText})
 	case sim.Comet:

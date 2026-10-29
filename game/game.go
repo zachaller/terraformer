@@ -386,6 +386,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.atlasDirty = false
 	}
 	g.drawPlanet(screen)
+	g.drawReach(screen)
 	g.runUI(g.newUI(screen))
 
 	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {

@@ -74,8 +74,8 @@ type Planet struct {
 	Ticks uint64
 
 	neighbors [][]int32 // indices of each tile's neighbours (shared with the Grid)
-	dirs      []Vec3     // unit direction through each tile's centre
-	cosLat    []float64  // cosine of each tile's latitude
+	dirs      []Vec3    // unit direction through each tile's centre
+	cosLat    []float64 // cosine of each tile's latitude
 	// co2PerIce is how much atmosphere (kPa) melting one unit of ice
 	// releases, scaled so melting all the starting ice adds maxReleasedCO2.
 	co2PerIce float64

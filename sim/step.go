@@ -10,8 +10,8 @@ const (
 	freezeRate    = 0.002
 	flowRate      = 0.2
 	maxFlowShare  = 1.0 / MaxNeighbors // most of a tile's free water that can leave to one neighbour
-	soilRetention = 0.05 // water the ground holds as moisture instead of letting it flow
-	elevScale     = 2.0  // converts Height into the same units as water depth
+	soilRetention = 0.05               // water the ground holds as moisture instead of letting it flow
+	elevScale     = 2.0                // converts Height into the same units as water depth
 
 	lifeGrowth       = 0.01
 	lifeSpread       = 0.02

@@ -42,16 +42,16 @@ func (g *Game) confirmPlacement() {
 	})
 }
 
-// maxAreaCells is the most tiles a placement preview tints; the shader has
-// an array of this size.
-const maxAreaCells = 12
+// maxAreaCells is the most tiles a placement preview tints: two rings of
+// hexes. The shader has an array of this size.
+const maxAreaCells = 18
 
 // placementArea is how many neighbour-steps out a building's effect reaches,
 // and the colour to tint that area.
 func placementArea(bt sim.BuildingType) (int, color.RGBA) {
 	switch bt {
 	case sim.HeaterMachine:
-		return 1, colAmber // its tile's four neighbours
+		return 1, colAmber // its tile's neighbours
 	case sim.Mine:
 		return 1, rgba(0xB07CA0)
 	case sim.Smelter:
@@ -61,8 +61,7 @@ func placementArea(bt sim.BuildingType) (int, color.RGBA) {
 }
 
 // areaCells lists the tiles within steps neighbour-steps of c (not c itself),
-// following the same neighbours as the simulation, so the preview is right
-// across cube seams.
+// following the same neighbours as the simulation.
 func areaCells(grid sim.Grid, c sim.Cell, steps int) []sim.Cell {
 	seen := map[sim.Cell]bool{c: true}
 	frontier := []sim.Cell{c}
@@ -280,7 +279,7 @@ func (g *Game) drawLinkPreview(screen *ebiten.Image) {
 	a := p.Dir(d.from)
 
 	// Reach: a dashed circle MaxLinkLength tiles around the source.
-	reach := sim.MaxLinkLength * (math.Pi / 2 / float64(p.Grid.N))
+	reach := sim.MaxLinkLength * p.Grid.TileAngle()
 	ref := sim.Vec3{Y: 1}
 	if math.Abs(a.Y) > 0.9 {
 		ref = sim.Vec3{X: 1}

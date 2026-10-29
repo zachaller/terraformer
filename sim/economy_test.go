@@ -11,8 +11,8 @@ import (
 func economyPlanet(t *testing.T) (p *Planet, lander, ore Cell) {
 	t.Helper()
 	p = NewPlanet(16, 1)
-	lander = Cell{Face: 4, I: 8, J: 8}
-	ore = Cell{Face: 4, I: 10, J: 8}
+	lander = Cell{Diamond: 4, I: 8, J: 8}
+	ore = Cell{Diamond: 4, I: 10, J: 8}
 	for i := range p.Tiles {
 		p.Tiles[i].Ore = 0
 	}
@@ -41,7 +41,7 @@ func mustLink(t *testing.T, p *Planet, a, b Cell) {
 
 func TestBuildRules(t *testing.T) {
 	p := NewPlanet(16, 1)
-	c := Cell{Face: 4, I: 8, J: 8}
+	c := Cell{Diamond: 4, I: 8, J: 8}
 	if _, err := p.Build(SolarPanel, c); !errors.Is(err, ErrNotLanded) {
 		t.Fatalf("building before landing: got %v, want ErrNotLanded", err)
 	}
@@ -55,7 +55,7 @@ func TestBuildRules(t *testing.T) {
 	if _, err := p.Build(SolarPanel, lander); !errors.Is(err, ErrOccupied) {
 		t.Fatalf("building on the lander: got %v", err)
 	}
-	if _, err := p.Build(Mine, Cell{Face: 4, I: 8, J: 10}); !errors.Is(err, ErrNoOre) {
+	if _, err := p.Build(Mine, Cell{Diamond: 4, I: 8, J: 10}); !errors.Is(err, ErrNoOre) {
 		t.Fatalf("mine off a deposit: got %v", err)
 	}
 	mustBuild(t, p, Mine, ore)
@@ -64,9 +64,9 @@ func TestBuildRules(t *testing.T) {
 	}
 	// Spend the rest, then check we can't overspend.
 	for i := 0; p.Stores()[Metal] >= Specs[SolarPanel].Cost; i++ {
-		mustBuild(t, p, SolarPanel, Cell{Face: 4, I: i, J: 2})
+		mustBuild(t, p, SolarPanel, Cell{Diamond: 4, I: i, J: 2})
 	}
-	if _, err := p.Build(SolarPanel, Cell{Face: 4, I: 0, J: 4}); err == nil {
+	if _, err := p.Build(SolarPanel, Cell{Diamond: 4, I: 0, J: 4}); err == nil {
 		t.Fatal("built with too little metal")
 	}
 }
@@ -74,7 +74,7 @@ func TestBuildRules(t *testing.T) {
 func TestLinkRules(t *testing.T) {
 	p, lander, ore := economyPlanet(t)
 	mustBuild(t, p, Mine, ore)
-	if err := p.Link(lander, Cell{Face: 4, I: 3, J: 3}); !errors.Is(err, ErrNoBuilding) {
+	if err := p.Link(lander, Cell{Diamond: 4, I: 3, J: 3}); !errors.Is(err, ErrNoBuilding) {
 		t.Fatalf("link to empty tile: got %v", err)
 	}
 	if err := p.Link(lander, lander); !errors.Is(err, ErrSameBuilding) {
@@ -88,7 +88,7 @@ func TestLinkRules(t *testing.T) {
 	if err := p.Link(ore, lander); !errors.Is(err, ErrAlreadyLinked) {
 		t.Fatalf("duplicate link: got %v", err)
 	}
-	far := Cell{Face: 1, I: 8, J: 8} // other side of the planet
+	far := Cell{Diamond: 7, I: 8, J: 8} // other side of the planet
 	mustBuild(t, p, SolarPanel, far)
 	if err := p.Link(lander, far); err == nil {
 		t.Fatal("linked across the planet")
@@ -98,7 +98,7 @@ func TestLinkRules(t *testing.T) {
 func TestNetworksFollowLinks(t *testing.T) {
 	p, lander, ore := economyPlanet(t)
 	mine := mustBuild(t, p, Mine, ore)
-	solar := mustBuild(t, p, SolarPanel, Cell{Face: 4, I: 8, J: 10})
+	solar := mustBuild(t, p, SolarPanel, Cell{Diamond: 4, I: 8, J: 10})
 	if p.NetworkOf(mine) == p.NetworkOf(p.BuildingAt(lander)) {
 		t.Fatal("unlinked buildings share a network")
 	}
@@ -124,7 +124,7 @@ func TestProductionChainFillsStores(t *testing.T) {
 	// mine -> smelter, both linked to the lander: ore goes to the stores, the
 	// smelter draws it back, and metal comes out.
 	p, lander, ore := economyPlanet(t)
-	smelterCell := Cell{Face: 4, I: 8, J: 10}
+	smelterCell := Cell{Diamond: 4, I: 8, J: 10}
 	mustBuild(t, p, Mine, ore)
 	mustBuild(t, p, Smelter, smelterCell)
 	mustLink(t, p, lander, ore)
@@ -149,7 +149,7 @@ func TestOutputWithoutDepotStalls(t *testing.T) {
 	// A mine and solar panel linked to each other but not the lander: ore
 	// fills the mine's buffer and then mining stops.
 	p, _, ore := economyPlanet(t)
-	solarCell := Cell{Face: 4, I: 10, J: 10}
+	solarCell := Cell{Diamond: 4, I: 10, J: 10}
 	mine := mustBuild(t, p, Mine, ore)
 	mustBuild(t, p, SolarPanel, solarCell)
 	mustLink(t, p, ore, solarCell)
@@ -170,7 +170,7 @@ func TestOutputWithoutDepotStalls(t *testing.T) {
 func TestPowerShortageSlowsMachines(t *testing.T) {
 	// Lander gives 3 power; a heater (3) plus a mine (1) want 4.
 	p, lander, ore := economyPlanet(t)
-	heaterCell := Cell{Face: 4, I: 6, J: 8}
+	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 	heater := mustBuild(t, p, HeaterMachine, heaterCell)
 	mine := mustBuild(t, p, Mine, ore)
 	mustLink(t, p, lander, heaterCell)
@@ -183,7 +183,7 @@ func TestPowerShortageSlowsMachines(t *testing.T) {
 
 func TestUnpoweredMachineIdles(t *testing.T) {
 	p, _, _ := economyPlanet(t)
-	heater := mustBuild(t, p, HeaterMachine, Cell{Face: 4, I: 6, J: 8})
+	heater := mustBuild(t, p, HeaterMachine, Cell{Diamond: 4, I: 6, J: 8})
 	p.Step()
 	if heater.Activity != 0 {
 		t.Fatalf("unlinked heater ran: activity %v", heater.Activity)
@@ -192,7 +192,7 @@ func TestUnpoweredMachineIdles(t *testing.T) {
 
 func TestHeaterWarmsTile(t *testing.T) {
 	p, lander, _ := economyPlanet(t)
-	heaterCell := Cell{Face: 4, I: 6, J: 8}
+	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 	mustBuild(t, p, HeaterMachine, heaterCell)
 	mustLink(t, p, lander, heaterCell)
 	before := p.Tile(heaterCell).Temp
@@ -228,8 +228,8 @@ func TestPollutionBlocksLife(t *testing.T) {
 func TestEconomyDeterministic(t *testing.T) {
 	run := func() *Planet {
 		p, lander, ore := economyPlanet(t)
-		smelterCell := Cell{Face: 4, I: 8, J: 10}
-		heaterCell := Cell{Face: 4, I: 6, J: 8}
+		smelterCell := Cell{Diamond: 4, I: 8, J: 10}
+		heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 		mustBuild(t, p, Mine, ore)
 		mustBuild(t, p, Smelter, smelterCell)
 		mustBuild(t, p, HeaterMachine, heaterCell)

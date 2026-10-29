@@ -73,7 +73,7 @@ type Planet struct {
 	// Ticks is the number of simulation steps run so far.
 	Ticks uint64
 
-	neighbors [][4]int32 // indices of each tile's four neighbours
+	neighbors [][]int32 // indices of each tile's neighbours (shared with the Grid)
 	dirs      []Vec3     // unit direction through each tile's centre
 	cosLat    []float64  // cosine of each tile's latitude
 	// co2PerIce is how much atmosphere (kPa) melting one unit of ice
@@ -107,7 +107,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 		Seed:       seed,
 		Tiles:      make([]Tile, cells),
 		Atmosphere: startAtmosphere,
-		neighbors:  make([][4]int32, cells),
+		neighbors:  make([][]int32, cells),
 		dirs:       make([]Vec3, cells),
 		cosLat:     make([]float64, cells),
 		nextTemp:   make([]float64, cells),
@@ -119,9 +119,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 	totalIce := 0.0
 	for idx := range p.Tiles {
 		c := g.CellAt(idx)
-		for k, nb := range g.Neighbors(c) {
-			p.neighbors[idx][k] = int32(g.Index(nb))
-		}
+		p.neighbors[idx] = g.NeighborIndices(idx)
 		d := g.DirFromCell(c)
 		p.dirs[idx] = d
 		p.cosLat[idx] = math.Sqrt(1 - d.Y*d.Y)

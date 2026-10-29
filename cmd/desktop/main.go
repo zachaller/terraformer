@@ -15,7 +15,7 @@ import (
 func main() {
 	var opts game.Options
 	flag.Uint64Var(&opts.Seed, "seed", 1, "planet seed for a new game")
-	flag.IntVar(&opts.GridSize, "size", 32, "tiles per cube face edge")
+	flag.IntVar(&opts.GridSize, "size", 25, "hex grid size: steps along each icosahedron edge (tiles = 10·size² + 2)")
 	flag.BoolVar(&opts.DemoHeaters, "demo-heaters", false, "put fixed warmth on a ring of tiles around the equator")
 	flag.BoolVar(&opts.DemoColony, "demo-colony", false, "land and build a small working colony")
 	flag.IntVar(&opts.DemoSteps, "demo-steps", 0, "fast-forward this many simulation steps (10 = one day)")

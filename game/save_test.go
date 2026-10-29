@@ -12,7 +12,7 @@ func TestSaveAndReload(t *testing.T) {
 
 	g := &Game{opts: Options{GridSize: 16}}
 	g.setPlanet(sim.NewPlanet(16, 9))
-	if err := g.planet.Land(sim.Cell{Face: 4, I: 8, J: 8}); err != nil {
+	if err := g.planet.Land(sim.Cell{Diamond: 4, I: 8, J: 8}); err != nil {
 		t.Fatal(err)
 	}
 	for range 50 {

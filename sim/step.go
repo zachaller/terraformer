@@ -9,7 +9,7 @@ const (
 	meltRate      = 0.002
 	freezeRate    = 0.002
 	flowRate      = 0.2
-	maxFlowShare  = 0.25 // most of a tile's free water that can leave to one neighbour
+	maxFlowShare  = 1.0 / MaxNeighbors // most of a tile's free water that can leave to one neighbour
 	soilRetention = 0.05 // water the ground holds as moisture instead of letting it flow
 	elevScale     = 2.0  // converts Height into the same units as water depth
 
@@ -23,7 +23,7 @@ const (
 	maxLifeTemp      = 60.0
 	maxLifePollution = 0.25
 
-	pollutionSpread = 0.02  // share that drifts to each neighbour per step
+	pollutionSpread = 0.08  // share that drifts away to neighbours per step
 	pollutionDecay  = 0.001 // cleaned up naturally per step
 )
 
@@ -59,7 +59,7 @@ func (p *Planet) stepTemperature() {
 		for _, nb := range p.neighbors[idx] {
 			avg += p.Tiles[nb].Temp
 		}
-		avg /= 4
+		avg /= float64(len(p.neighbors[idx]))
 		target := p.equilibrium(idx) + p.TotalHeat(idx)
 		p.nextTemp[idx] = t.Temp + tempRelax*(target-t.Temp) + tempDiffusion*(avg-t.Temp)
 	}
@@ -132,7 +132,7 @@ func (p *Planet) TotalHeat(idx int) float64 {
 func (p *Planet) stepPollution() {
 	clear(p.flow)
 	for idx := range p.Tiles {
-		out := p.Tiles[idx].Pollution * pollutionSpread
+		out := p.Tiles[idx].Pollution * pollutionSpread / float64(len(p.neighbors[idx]))
 		for _, nb := range p.neighbors[idx] {
 			p.flow[nb] += out
 			p.flow[idx] -= out
@@ -165,7 +165,7 @@ func (p *Planet) stepLife() {
 		for _, nb := range p.neighbors[idx] {
 			avg += p.Tiles[nb].Life
 		}
-		avg /= 4
+		avg /= float64(len(p.neighbors[idx]))
 		l += lifeGrowth*l*(1-l) + lifeSpread*avg*(1-l)
 		if l == 0 && p.chance(idx, 0) < lifeEmerge {
 			l = lifeSeed

@@ -5,7 +5,7 @@ import "testing"
 // lushPlanet returns a small planet with warm, damp, clean land everywhere,
 // established microbes, and the given atmosphere.
 func lushPlanet(air float64) *Planet {
-	p := NewPlanet(8, 1)
+	p := NewPlanet(6, 1) // about as many tiles around as a cube-sphere of 8
 	p.Atmosphere = air
 	for i := range p.Tiles {
 		t := &p.Tiles[i]
@@ -16,7 +16,7 @@ func lushPlanet(air float64) *Planet {
 
 func TestSuccessionOnLand(t *testing.T) {
 	p := lushPlanet(100)
-	for range 6000 {
+	for range 7000 {
 		p.stepSpecies()
 		p.Ticks++
 	}

@@ -18,7 +18,7 @@ Hobby project, targeting release on the Google Play Store.
 | Engine | [Ebitengine](https://ebitengine.org) (v2) | Native Go, mature Android support, games already shipped on Play |
 | Shaders | Kage (Ebitengine's Go-like shader language) | Built in |
 | Planet rendering | 2D "shader globe" | Ebitengine is 2D only; see below |
-| Planet grid | Cube-sphere (6 square grids projected onto a sphere), conformal mapping | Trivial tile lookup in a shader; simple neighbour rules; square tiles whose rows run straight across face seams |
+| Planet grid | Geodesic hex grid (hexagons plus 12 pentagons, built on an icosahedron) | Nearly even tile sizes and shapes, no visible seams or corners; still a cheap lookup in the shader |
 | Simulation | Pure Go package, engine-independent | Testable with `go test`; portable if the engine ever changes |
 | Content | Data files (YAML/JSON) for tiles, buildings, rules | Balance without code changes |
 | Android build | `ebitenmobile bind` → `.aar` → thin Android Studio project → AAB | The standard Ebitengine mobile path |
@@ -38,33 +38,46 @@ Ebitengine has no 3D, so the planet is faked:
 
 1. Draw one screen-space quad where the planet should appear.
 2. A Kage fragment shader treats each pixel as a ray hitting a sphere, applies
-   the current rotation, and converts the hit point to a (cube face, u, v)
-   coordinate.
+   the current rotation, and finds the tile under it (see below).
 3. It samples a **tile data texture** (tile type per cell, updated by the
    simulation) and colours the pixel: biome blending, lighting, an atmosphere
    rim whose strength follows atmosphere level, and water that follows sea level.
 4. Buildings and plants are sprites drawn at projected positions and hidden
    when they rotate to the far side.
 
-Tapping does the same maths in Go: screen point → sphere hit → cube face cell.
+Tapping does the same maths in Go: screen point → sphere hit → tile.
 
-**Cube to sphere.** A square grid can't cover a sphere evenly: somewhere
-the grid needs points where three rows meet instead of four. A cube-sphere
-puts those at the cube's eight corners. The face grid uses the conformal
-mapping of Rančić, Purser and Mesinger (1996), with the Taylor-series
-coefficients from their Table B1 (as reproduced in
-[CubedSphere.jl](https://github.com/CliMA/CubedSphere.jl)). Conformal means
-tiles are square rather than sheared, and grid lines cross the seams between
-faces at right angles, so rows carry on straight from one face to the next.
-On its own the conformal mapping shrinks tiles towards the corners to almost
-nothing (the corner tile would have about a ninth of the area of a
-face-centre tile), so the grid is also stretched radially around each corner
-(`cornerWarp` in `sim/grid.go`). Because that only moves points along lines
-through the corner, rows still cross seams at right angles; the corner tile
-ends up at about 70% of a face-centre tile, and every tile is within a
-factor of about 1.6 of every other, at the cost of up to about 25° of skew
-in the tiles nearest the corners. The earlier equal-angle mapping had
-similar sizes and skew but bent every row at the seams.
+**The tile grid.** No grid of identical squares or hexagons can cover a
+sphere; every approach puts the irregularity somewhere (games use latitude
+bands, cube-spheres, HEALPix, hex spheres or relaxed irregular grids).
+Terraformer uses a
+geodesic hex grid, as *Before We Leave* and Oskar Stålberg's *Planet* do:
+an icosahedron whose 20 triangular faces are each divided into a triangular
+lattice with N steps per edge. Each lattice point is the centre of a tile,
+so tiles are hexagons, except for the twelve at the icosahedron's corners,
+which are pentagons. There are 10·N² + 2 tiles (6,252 at the default N = 25).
+
+- **Addressing.** The faces pair up into ten diamonds, each an N×N patch of
+  lattice points (I, J), plus the two poles. Points on a diamond's edges are
+  shared; each is owned by exactly one diamond (`Grid.LatticeCell`).
+  Neighbours are found once per grid size by linking adjacent lattice
+  points within every diamond.
+- **Even sizes.** Projecting a flat face onto the sphere shrinks tiles near
+  its corners to under half the size of those at its centre. Within each
+  face, positions are warped first (each barycentric weight w becomes
+  w − w²/4), which brings the smallest tile to about 0.83 of the largest.
+  The warp depends only on the weights, symmetrically, so neighbouring faces
+  agree along their shared edge.
+- **Lookup.** Go and the shader do the same thing: pick the face whose
+  centre is nearest the direction, compute barycentric coordinates there,
+  undo the warp (a few Newton steps), and take the nearest lattice point.
+  The shader's atlas has a pixel for every lattice point in each diamond,
+  including shared edges, so the three tiles around any point can be
+  blended for smooth colours.
+
+Earlier versions used a cube-sphere with equal-angle, then conformal,
+mappings. Those gave square tiles, but visible corners and either bent rows
+at the cube's seams or tiles that shrank badly towards its corners.
 
 **This is the biggest technical risk, so it's the first prototype.**
 
@@ -87,12 +100,12 @@ regular check-ins on feel and performance.
 ## Simulation model (as built in step 3)
 
 All in `sim/step.go`, deterministic (seeded RNG, fixed tick of 10 steps per
-in-game day at 1x speed), about 0.5 ms per step for 6,144 tiles on desktop.
+in-game day at 1x speed), about 0.5 ms per step for about 6,000 tiles on desktop.
 
 - **Temperature:** each tile relaxes towards an equilibrium set by latitude,
   the greenhouse effect (rises with atmospheric pressure), elevation and ice
   cover (ice reflects sunlight), plus any heater warmth; heat also diffuses to
-  the four neighbours.
+  the six neighbours (five for the pentagons).
 - **Ice and water:** ice melts above 0 °C and water freezes below. The ice
   holds frozen CO₂, so melting releases atmosphere: the global feedback loop.
 - **Water flow:** water above the soil's retained moisture (0.05) flows to

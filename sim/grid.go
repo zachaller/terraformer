@@ -5,36 +5,49 @@ package sim
 
 import (
 	"math"
-	"math/cmplx"
+	"sync"
 )
 
-// The planet surface is a cube-sphere: the six faces of a cube, each an N×N
-// grid, projected onto a unit sphere. Each face has two tangent axes (u, v)
-// in [-1, 1]:
+// The planet surface is a geodesic hex grid (a Goldberg polyhedron): mostly
+// hexagonal tiles, plus exactly twelve pentagons, which no hex grid on a
+// sphere can avoid. It's built on an icosahedron whose 20 triangular faces
+// are each divided into a triangular lattice with N steps along every edge;
+// each lattice point is the centre of one tile, and the pentagons are the
+// icosahedron's 12 corners.
 //
-//	face 0 (+X): u = -z, v =  y
-//	face 1 (-X): u =  z, v =  y
-//	face 2 (+Y): u =  x, v = -z
-//	face 3 (-Y): u =  x, v =  z
-//	face 4 (+Z): u =  x, v =  y
-//	face 5 (-Z): u = -x, v =  y
+// The faces are grouped into ten diamonds (pairs of faces sharing an edge),
+// each holding an N×N patch of lattice points addressed by (I, J), plus the
+// two poles, which belong to no diamond:
 //
-// The (u, v) grid isn't evenly spaced on the flat cube face: it uses the
-// conformal cubed-sphere mapping of Rančić, Purser and Mesinger (1996), which
-// keeps tiles square (no shearing) everywhere and makes grid lines cross the
-// seams between faces at right angles, so rows run straight on from one face
-// to the next. On its own, though, it shrinks tiles towards the eight cube
-// corners to almost nothing (the corner tile would have about a ninth of the
-// area of a face-centre one), so the grid is also stretched radially around
-// each corner (cornerWarp). That keeps rows meeting seams at right angles,
-// and brings the corner tile up to about 70% of a face-centre tile, at the
-// cost of some skew (up to about 25°) in the tiles nearest the corners.
+//	diamonds 0–4 (north): corners O = north pole, P = upper ring k,
+//	                      Q = upper ring k+1, R = lower ring k
+//	diamonds 5–9 (south): corners O = upper ring k+1, P = lower ring k,
+//	                      Q = lower ring k+1, R = south pole
 //
-// game/planet.kage repeats this mapping (faceUV and dirFromFaceUV); keep
-// them in sync.
+// where the upper ring's five corners sit at 26.6°N, longitudes 72k, and the
+// lower ring's at 26.6°S, longitudes 72k+36. The lattice point (i, j), with i
+// and j in [0, N], lies on face (O, P, Q) at O + i/N·(P−O) + j/N·(Q−O) when
+// i+j ≤ N, and on face (R, P, Q) otherwise. Points on a diamond's edges are
+// shared with its neighbours; each diamond owns those with 0 ≤ i < N and
+// 1 ≤ j ≤ N (see LatticeCell).
+//
+// Within each face, positions are spread with latticeWarp so tiles near the
+// icosahedron's corners aren't much smaller than those at face centres, then
+// projected onto the sphere from the centre.
+//
+// game/planet.kage repeats this mapping; keep them in sync.
 
-// Faces is the number of cube faces.
-const Faces = 6
+// Diamonds is the number of diamonds the cells are grouped into.
+const Diamonds = 10
+
+// Pole "diamonds": the north and south pole cells.
+const (
+	NorthPole = Diamonds
+	SouthPole = Diamonds + 1
+)
+
+// MaxNeighbors is the most neighbours a cell has (pentagons have five).
+const MaxNeighbors = 6
 
 // Vec3 is a 3D vector.
 type Vec3 struct{ X, Y, Z float64 }
@@ -49,267 +62,303 @@ func (a Vec3) Cross(b Vec3) Vec3 {
 	return Vec3{a.Y*b.Z - a.Z*b.Y, a.Z*b.X - a.X*b.Z, a.X*b.Y - a.Y*b.X}
 }
 
-// Cell identifies one tile: a cube face and a column (I) and row (J) on it.
+// Cell identifies one tile: a diamond and a lattice point (I, J) in it, or a
+// pole (Diamond NorthPole or SouthPole, with I and J zero).
 type Cell struct {
-	Face, I, J int
+	Diamond, I, J int
 }
 
-// Grid is a cube-sphere with N×N cells per face.
+// Grid is a geodesic hex grid with N lattice steps along each icosahedron
+// edge.
 type Grid struct {
 	N int
 }
 
 // NumCells is the total number of cells on the planet.
-func (g Grid) NumCells() int { return Faces * g.N * g.N }
+func (g Grid) NumCells() int { return Diamonds*g.N*g.N + 2 }
 
 // Index returns a dense index for c in [0, NumCells).
-func (g Grid) Index(c Cell) int { return (c.Face*g.N+c.J)*g.N + c.I }
+func (g Grid) Index(c Cell) int {
+	switch c.Diamond {
+	case NorthPole:
+		return Diamonds * g.N * g.N
+	case SouthPole:
+		return Diamonds*g.N*g.N + 1
+	}
+	return (c.Diamond*g.N+c.J-1)*g.N + c.I
+}
 
 // CellAt is the inverse of Index.
 func (g Grid) CellAt(idx int) Cell {
-	i := idx % g.N
-	j := (idx / g.N) % g.N
-	return Cell{Face: idx / (g.N * g.N), I: i, J: j}
+	n := g.N
+	switch idx {
+	case Diamonds * n * n:
+		return Cell{Diamond: NorthPole}
+	case Diamonds*n*n + 1:
+		return Cell{Diamond: SouthPole}
+	}
+	return Cell{Diamond: idx / (n * n), I: idx % n, J: (idx/n)%n + 1}
 }
 
-// CellFromDir returns the cell containing direction d (need not be unit length).
+// LatticeCell returns the cell at lattice point (i, j) of diamond d, where i
+// and j are in [0, N]: points on a diamond's edges belong to it or to a
+// neighbouring diamond, or are poles.
+func (g Grid) LatticeCell(d, i, j int) Cell {
+	n := g.N
+	for {
+		if d < 5 { // north diamond k = d
+			switch {
+			case i == 0 && j == 0:
+				return Cell{Diamond: NorthPole}
+			case j == 0: // edge to the north pole, shared with diamond k−1
+				d, i, j = (d+4)%5, 0, i
+			case i == n: // edge to lower ring k, shared with south diamond k−1
+				d, i = 5+(d+4)%5, 0
+			default:
+				return Cell{Diamond: d, I: i, J: j}
+			}
+		} else { // south diamond k = d−5
+			k := d - 5
+			switch {
+			case i == n && j == n:
+				return Cell{Diamond: SouthPole}
+			case j == 0: // edge to upper ring k+1, shared with north diamond k
+				d, j = k, n
+			case i == n: // edge to the south pole, shared with south diamond k−1
+				d, i, j = 5+(k+4)%5, j, n
+			default:
+				return Cell{Diamond: d, I: i, J: j}
+			}
+		}
+	}
+}
+
+// lattice returns a diamond and lattice point that c is at.
+func (g Grid) lattice(c Cell) (d, i, j int) {
+	switch c.Diamond {
+	case NorthPole:
+		return 0, 0, 0
+	case SouthPole:
+		return 5, g.N, g.N
+	}
+	return c.Diamond, c.I, c.J
+}
+
+// CellFromDir returns the cell containing direction d (need not be unit
+// length): the lattice point nearest to it, measured in its face's
+// (warped) lattice.
 func (g Grid) CellFromDir(d Vec3) Cell {
-	face, u, v := faceUV(d)
-	return Cell{Face: face, I: g.coord(u), J: g.coord(v)}
+	dm, i, j := g.latticeCoords(d)
+	i0, j0 := math.Floor(i), math.Floor(j)
+	fi, fj := i-i0, j-j0
+	// The lattice triangle containing (i, j), and the corner it's closest
+	// to: the one with the largest barycentric weight.
+	var di, dj int
+	if fi+fj < 1 {
+		switch {
+		case fi > fj && fi > 1-fi-fj:
+			di = 1
+		case fj > 1-fi-fj:
+			dj = 1
+		}
+	} else {
+		switch {
+		case 1-fj > 1-fi && 1-fj > fi+fj-1:
+			di = 1
+		case 1-fi > fi+fj-1:
+			dj = 1
+		default:
+			di, dj = 1, 1
+		}
+	}
+	return g.LatticeCell(dm, clampInt(int(i0)+di, 0, g.N), clampInt(int(j0)+dj, 0, g.N))
+}
+
+func clampInt(v, lo, hi int) int { return min(max(v, lo), hi) }
+
+// latticeCoords returns the diamond direction d falls in and its continuous
+// lattice coordinates there.
+func (g Grid) latticeCoords(d Vec3) (dm int, i, j float64) {
+	best, upper := math.Inf(-1), false
+	for k := range Diamonds {
+		c := &diamondCorners[k]
+		if v := d.Dot(c.O.Add(c.P).Add(c.Q)); v > best {
+			best, dm, upper = v, k, false
+		}
+		if v := d.Dot(c.R.Add(c.P).Add(c.Q)); v > best {
+			best, dm, upper = v, k, true
+		}
+	}
+	c := &diamondCorners[dm]
+	a := c.O
+	if upper {
+		a = c.R
+	}
+	// Barycentric coordinates of d's projection onto the face's plane.
+	ba := d.Dot(c.P.Cross(c.Q))
+	bp := a.Dot(d.Cross(c.Q))
+	bq := a.Dot(c.P.Cross(d))
+	s := ba + bp + bq
+	_, wp, wq := latticeUnwarp(ba/s, bp/s, bq/s)
+	n := float64(g.N)
+	if upper {
+		return dm, n * (1 - wq), n * (1 - wp)
+	}
+	return dm, n * wp, n * wq
 }
 
 // DirFromCell returns the unit direction through the centre of c.
 func (g Grid) DirFromCell(c Cell) Vec3 {
-	u := (float64(c.I)+0.5)/float64(g.N)*2 - 1
-	v := (float64(c.J)+0.5)/float64(g.N)*2 - 1
-	return dirFromFaceUV(c.Face, u, v).Normalize()
+	d, i, j := g.lattice(c)
+	return LatticeDir(d, float64(i)/float64(g.N), float64(j)/float64(g.N))
 }
 
-// Neighbors returns the four cells sharing an edge with c, in the order
-// +I, -I, +J, -J.
-func (g Grid) Neighbors(c Cell) [4]Cell {
-	steps := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
-	var out [4]Cell
-	for k, s := range steps {
-		out[k] = g.Wrap(c.Face, c.I+s[0], c.J+s[1])
+// LatticeDir is the unit direction through point (i, j) of diamond d, with
+// i and j as fractions of N, in [0, 1].
+func LatticeDir(d int, i, j float64) Vec3 {
+	c := &diamondCorners[d]
+	a, wa, wp, wq := c.O, 1-i-j, i, j
+	if i+j > 1 {
+		a, wa, wp, wq = c.R, i+j-1, 1-j, 1-i
+	}
+	ba, bp, bq := latticeWarp(wa, wp, wq)
+	return a.Scale(ba).Add(c.P.Scale(bp)).Add(c.Q.Scale(bq)).Normalize()
+}
+
+// latticeWarpC sets latticeWarp's strength; 0.25 makes tile areas the most
+// even (the smallest is about 0.83 of the largest; without it, 0.44).
+const latticeWarpC = 0.25
+
+// latticeWarp maps evenly spaced barycentric coordinates on a face to the
+// planar barycentric coordinates of the point shown there: each weight w
+// becomes w − c·w², renormalised. That pushes points towards the face's
+// corners, where projection onto the sphere shrinks tiles most. It depends
+// only on the weights, symmetrically, so points on a shared edge land in the
+// same place from either face.
+func latticeWarp(wa, wp, wq float64) (float64, float64, float64) {
+	ga, gp, gq := warpG(wa), warpG(wp), warpG(wq)
+	s := ga + gp + gq
+	return ga / s, gp / s, gq / s
+}
+
+func warpG(w float64) float64 { return w - latticeWarpC*w*w }
+
+// latticeUnwarp inverts latticeWarp: it finds weights w summing to 1 with
+// warpG(w) = λ·b for some λ, by Newton's method on λ.
+func latticeUnwarp(ba, bp, bq float64) (float64, float64, float64) {
+	// warpG(w) = y has w = (1 − √(1 − 4cy)) / 2c.
+	const c = latticeWarpC
+	inv := func(y float64) float64 { return (1 - math.Sqrt(math.Max(1-4*c*y, 0))) / (2 * c) }
+	slope := func(y float64) float64 { return 1 / math.Sqrt(math.Max(1-4*c*y, 1e-12)) }
+	l := 1 - c/3
+	for range 6 {
+		h := inv(l*ba) + inv(l*bp) + inv(l*bq) - 1
+		dh := ba*slope(l*ba) + bp*slope(l*bp) + bq*slope(l*bq)
+		l -= h / dh
+	}
+	return inv(l * ba), inv(l * bp), inv(l * bq)
+}
+
+// Diamond corners, as unit vectors.
+type corners struct{ O, P, Q, R Vec3 }
+
+var diamondCorners = func() [Diamonds]corners {
+	lat := math.Atan(0.5)
+	ring := func(lon, lat float64) Vec3 {
+		return Vec3{math.Cos(lat) * math.Cos(lon), math.Sin(lat), math.Cos(lat) * math.Sin(lon)}
+	}
+	up := func(k int) Vec3 { return ring(float64(k%5)*2*math.Pi/5, lat) }
+	low := func(k int) Vec3 { return ring((float64(k%5)+0.5)*2*math.Pi/5, -lat) }
+	north, south := Vec3{Y: 1}, Vec3{Y: -1}
+	var out [Diamonds]corners
+	for k := range 5 {
+		out[k] = corners{O: north, P: up(k), Q: up(k + 1), R: low(k)}
+		out[5+k] = corners{O: up(k + 1), P: low(k), Q: low(k + 1), R: south}
+	}
+	return out
+}()
+
+// DiamondCorners returns the corners O, P, Q and R of diamond d.
+func DiamondCorners(d int) (o, p, q, r Vec3) {
+	c := diamondCorners[d]
+	return c.O, c.P, c.Q, c.R
+}
+
+// topology is the neighbour structure for one grid size, built once.
+type topology struct {
+	neighbors [][]int32
+	tileAngle float64
+}
+
+var (
+	topoMu    sync.Mutex
+	topoCache = map[int]*topology{}
+)
+
+func (g Grid) topo() *topology {
+	topoMu.Lock()
+	defer topoMu.Unlock()
+	if t, ok := topoCache[g.N]; ok {
+		return t
+	}
+	n := g.N
+	t := &topology{neighbors: make([][]int32, g.NumCells())}
+	link := func(a, b int) {
+		if a == b {
+			return
+		}
+		for _, x := range t.neighbors[a] {
+			if int(x) == b {
+				return
+			}
+		}
+		t.neighbors[a] = append(t.neighbors[a], int32(b))
+		t.neighbors[b] = append(t.neighbors[b], int32(a))
+	}
+	// Every edge of the lattice lies within some diamond (including its
+	// edges), so linking adjacent lattice points diamond by diamond finds
+	// them all.
+	for d := range Diamonds {
+		for j := 0; j <= n; j++ {
+			for i := 0; i <= n; i++ {
+				a := g.Index(g.LatticeCell(d, i, j))
+				for _, s := range [3][2]int{{1, 0}, {0, 1}, {-1, 1}} {
+					ii, jj := i+s[0], j+s[1]
+					if ii >= 0 && ii <= n && jj <= n {
+						link(a, g.Index(g.LatticeCell(d, ii, jj)))
+					}
+				}
+			}
+		}
+	}
+	sum, count := 0.0, 0
+	for a, nbs := range t.neighbors {
+		da := g.DirFromCell(g.CellAt(a))
+		for _, b := range nbs {
+			sum += math.Acos(math.Min(da.Dot(g.DirFromCell(g.CellAt(int(b)))), 1))
+			count++
+		}
+	}
+	t.tileAngle = sum / float64(count)
+	topoCache[g.N] = t
+	return t
+}
+
+// Neighbors returns the cells sharing an edge with c: six, or five for the
+// twelve pentagons.
+func (g Grid) Neighbors(c Cell) []Cell {
+	nbs := g.topo().neighbors[g.Index(c)]
+	out := make([]Cell, len(nbs))
+	for k, nb := range nbs {
+		out[k] = g.CellAt(int(nb))
 	}
 	return out
 }
 
-// Wrap returns the cell at column i, row j of face, where i and j may run up
-// to a cell past the face's edges. The grid is symmetric about the plane of
-// every cube edge, so the cell just past an edge is the mirror image, across
-// that edge's plane, of the cell just inside it.
-func (g Grid) Wrap(face, i, j int) Cell {
-	if i >= 0 && i < g.N && j >= 0 && j < g.N {
-		return Cell{Face: face, I: i, J: j}
-	}
-	eu, ev, en := faceAxes(face)
-	d := g.DirFromCell(Cell{Face: face, I: mirror(i, g.N), J: mirror(j, g.N)})
-	if i < 0 || i >= g.N {
-		d = reflect(d, edgeNormal(eu, en, i < 0))
-	}
-	if j < 0 || j >= g.N {
-		d = reflect(d, edgeNormal(ev, en, j < 0))
-	}
-	return g.CellFromDir(d)
-}
+// NeighborIndices is Neighbors by index. The slice is shared: don't modify
+// it.
+func (g Grid) NeighborIndices(idx int) []int32 { return g.topo().neighbors[idx] }
 
-// mirror maps a column or row one past a face edge onto the one just inside.
-func mirror(k, n int) int {
-	if k < 0 {
-		return -1 - k
-	}
-	if k >= n {
-		return 2*n - 1 - k
-	}
-	return k
-}
-
-// edgeNormal is the normal of the plane through the face edge at the low
-// (axis = -1) or high (+1) end of axis e on the face with normal en.
-func edgeNormal(e, en Vec3, low bool) Vec3 {
-	if low {
-		return e.Add(en)
-	}
-	return e.Sub(en)
-}
-
-func reflect(d, n Vec3) Vec3 { return d.Sub(n.Scale(2 * d.Dot(n) / n.Dot(n))) }
-
-func (g Grid) coord(t float64) int {
-	k := int(math.Floor((t + 1) / 2 * float64(g.N)))
-	return min(max(k, 0), g.N-1)
-}
-
-// Rančić et al. (1996) map one eighth of a face, the triangle between the
-// face centre, an edge midpoint and a corner, through a Taylor series about
-// the corner: confA (their Table B1) maps the square's side, in Z = z⁴ where
-// z is the position relative to the corner, to the sphere's side, in W = w³
-// where w is a stereographic coordinate turned so the corner is at 0. The
-// powers open the corner's 90° (square) and 120° (sphere) angles out flat, so
-// the series converges quickly. confB is its inverse (series reversion of
-// confA; TestConformalSeries checks it). Twelve terms are accurate to about
-// 1e-8.
-var (
-	confA = [...]float64{1.47713062600964, -0.38183510510174, -0.05573058001191, -0.00895883606818, -0.00791315785221, -0.00486625437708, -0.00329251751279, -0.00235481488325, -0.00175870527475, -0.00135681133278, -0.00107459847699, -0.00086944475948}
-	confB = [...]float64{0.67698819751738992, 0.11847293456554467, 0.053171781346679235, 0.02965810434051968, 0.019124473040277028, 0.01342565621117456, 0.0099887332318051442, 0.0077486899640560845, 0.0062034697988811935, 0.0050901087488291518, 0.0042598118432780737, 0.0036230895607660438}
-
-	// The Möbius map between the stereographic coordinate (centre of the
-	// face at 0) and one with the corner (1, 1) at 0.
-	confRa = math.Sqrt(3) - 1
-	confCb = complex(-1, 1)
-	confCc = complex(confRa/2, 0) * confCb
-)
-
-// series evaluates c[0]·x + c[1]·x² + ….
-func series(c []float64, x complex128) complex128 {
-	s := complex(0, 0)
-	for k := len(c) - 1; k >= 0; k-- {
-		s = (s + complex(c[k], 0)) * x
-	}
-	return s
-}
-
-// octant folds (u, v) into the triangle 0 ≤ b ≤ a, returning what's needed
-// to unfold the result.
-func octant(u, v float64) (a, b float64, swap bool) {
-	a, b = math.Abs(u), math.Abs(v)
-	if b > a {
-		return b, a, true
-	}
-	return a, b, false
-}
-
-func unfold(a, b, u, v float64, swap bool) (float64, float64) {
-	if swap {
-		a, b = b, a
-	}
-	return math.Copysign(a, u), math.Copysign(b, v)
-}
-
-func faceUV(d Vec3) (face int, u, v float64) {
-	face, x, y := cubeFaceUV(d)
-	a, b, swap := octant(x, y)
-	// Stereographic coordinate of the point, then the corner-centred one.
-	w := complex(a, b) / complex(1+math.Sqrt(1+a*a+b*b), 0)
-	w = (w*confCb + complex(confRa, 0)) / (1 - w*confCc)
-	z := 2 * cmplx.Pow(series(confB[:], -w*w*w), 0.25)
-	// z is (1-a) + i(1-b) up to a quarter turn, which the folding undoes.
-	p, q := math.Abs(real(z)), math.Abs(imag(z))
-	a, b = cornerUnwarp(1-min(p, q), 1-max(p, q))
-	u, v = unfold(a, b, x, y, swap)
-	return face, u, v
-}
-
-// dirFromFaceUV is the inverse of faceUV: a direction (not unit length)
-// through (u, v) on face. u and v must be in [-1, 1].
-func dirFromFaceUV(face int, u, v float64) Vec3 {
-	a, b, swap := octant(u, v)
-	a, b = cornerWarp(a, b)
-	z := complex(1-a, 1-b) / 2
-	w := series(confA[:], z*z*z*z)
-	w = cmplx.Exp(complex(0, math.Pi/6)) * cmplx.Pow(w*1i, 1.0/3)
-	w = (w - complex(confRa, 0)) / (confCb + confCc*w)
-	x, y := unfold(real(w), imag(w), u, v, swap)
-	eu, ev, en := faceAxes(face)
-	// Inverse stereographic projection, scaled by (1 + |w|²)/2.
-	return eu.Scale(x).Add(ev.Scale(y)).Add(en.Scale((1 - x*x - y*y) / 2))
-}
-
-// cornerGamma sets how strongly cornerWarp enlarges tiles near cube corners:
-// 1 leaves the conformal grid alone; 4/3 cancels its shrinking exactly at
-// the corner; more makes corner tiles larger still.
-const cornerGamma = 1.5
-
-// cornerWarp maps a grid position (a, b), folded so that 0 ≤ b ≤ a ≤ 1,
-// to the conformal position it shows. Within distance 1 of the corner (1, 1)
-// it moves points away from the corner along the line to it, by a radius
-// map whose inverse is cornerSigma; further out it does nothing. Moving
-// points only along lines through the corner keeps the face's edges in
-// place and the grid symmetric, so rows still cross seams at right angles.
-func cornerWarp(a, b float64) (float64, float64) {
-	p, q := 1-a, 1-b
-	t := math.Hypot(p, q)
-	if t >= 1 || t == 0 {
-		return a, b
-	}
-	// Invert cornerSigma by Newton's method.
-	x := math.Pow(t, 1/cornerGamma)
-	for range 6 {
-		x -= (cornerSigma(x) - t) / cornerSigmaSlope(x)
-	}
-	k := x / t
-	return 1 - p*k, 1 - q*k
-}
-
-// cornerUnwarp is the inverse of cornerWarp.
-func cornerUnwarp(a, b float64) (float64, float64) {
-	p, q := 1-a, 1-b
-	t := math.Hypot(p, q)
-	if t >= 1 || t == 0 {
-		return a, b
-	}
-	k := cornerSigma(t) / t
-	return 1 - p*k, 1 - q*k
-}
-
-// cornerSigma maps distance from the corner on the conformal grid to
-// distance on the tile grid: about x^γ near the corner, and matching x (in
-// value and slope) at 1.
-func cornerSigma(x float64) float64 {
-	return math.Pow(x, cornerGamma) * (1 + (cornerGamma-1)*(1-x))
-}
-
-func cornerSigmaSlope(x float64) float64 {
-	const g = cornerGamma
-	return math.Pow(x, g-1) * (g*g - (g*g-1)*x)
-}
-
-// faceAxes returns the directions of increasing u and v on face, and its
-// normal.
-func faceAxes(face int) (eu, ev, en Vec3) {
-	en = cubeDir(face, 0, 0)
-	return cubeDir(face, 1, 0).Sub(en), cubeDir(face, 0, 1).Sub(en), en
-}
-
-// cubeFaceUV projects d onto the cube: its face and position (u, v) on it,
-// each in [-1, 1].
-func cubeFaceUV(d Vec3) (face int, u, v float64) {
-	ax, ay, az := math.Abs(d.X), math.Abs(d.Y), math.Abs(d.Z)
-	switch {
-	case ax >= ay && ax >= az:
-		if d.X > 0 {
-			return 0, -d.Z / ax, d.Y / ax
-		}
-		return 1, d.Z / ax, d.Y / ax
-	case ay >= az:
-		if d.Y > 0 {
-			return 2, d.X / ay, -d.Z / ay
-		}
-		return 3, d.X / ay, d.Z / ay
-	default:
-		if d.Z > 0 {
-			return 4, d.X / az, d.Y / az
-		}
-		return 5, -d.X / az, d.Y / az
-	}
-}
-
-// cubeDir is the inverse of cubeFaceUV: the point on the cube for (face, u, v).
-func cubeDir(face int, u, v float64) Vec3 {
-	switch face {
-	case 0:
-		return Vec3{1, v, -u}
-	case 1:
-		return Vec3{-1, v, u}
-	case 2:
-		return Vec3{u, 1, -v}
-	case 3:
-		return Vec3{u, -1, v}
-	case 4:
-		return Vec3{u, v, 1}
-	default:
-		return Vec3{-u, v, -1}
-	}
-}
+// TileAngle is the average angle, in radians, between neighbouring tiles'
+// centres: the planet's tile spacing.
+func (g Grid) TileAngle() float64 { return g.topo().tileAngle }

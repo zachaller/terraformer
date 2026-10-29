@@ -8,7 +8,7 @@ import (
 )
 
 // saveVersion is bumped whenever the saved format changes incompatibly.
-const saveVersion = 1
+const saveVersion = 2
 
 // savedPlanet is everything needed to restore a planet. Things derived from
 // the seed and size (terrain neighbours, latitudes, CO₂ per ice) are
@@ -68,9 +68,9 @@ func Load(r io.Reader) (*Planet, error) {
 		return nil, err
 	}
 	if s.Version != saveVersion {
-		return nil, fmt.Errorf("save is version %d, want %d", s.Version, saveVersion)
+		return nil, fmt.Errorf("save is from a different version of the game (format %d, want %d)", s.Version, saveVersion)
 	}
-	if s.N <= 0 || len(s.Tiles) != Faces*s.N*s.N {
+	if s.N <= 0 || len(s.Tiles) != (Grid{N: s.N}).NumCells() {
 		return nil, fmt.Errorf("save has %d tiles for size %d", len(s.Tiles), s.N)
 	}
 	p := NewPlanet(s.N, s.Seed)

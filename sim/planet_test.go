@@ -61,7 +61,7 @@ func TestNewPlanetStartsFrozenAndLifeless(t *testing.T) {
 func TestStepDeterministic(t *testing.T) {
 	a, b := NewPlanet(16, 3), NewPlanet(16, 3)
 	for _, p := range []*Planet{a, b} {
-		p.AddHeat(Cell{Face: 4, I: 8, J: 8}, 80)
+		p.AddHeat(Cell{Diamond: 4, I: 8, J: 8}, 80)
 		for range 500 {
 			p.Step()
 		}
@@ -78,8 +78,8 @@ func TestStepDeterministic(t *testing.T) {
 
 func TestWaterConserved(t *testing.T) {
 	p := NewPlanet(16, 5)
-	for f := range Faces {
-		p.AddHeat(Cell{Face: f, I: 8, J: 8}, maxHeat)
+	for f := range Diamonds {
+		p.AddHeat(Cell{Diamond: f, I: 8, J: 8}, maxHeat)
 	}
 	total := func() float64 {
 		s := p.Stats()
@@ -124,8 +124,8 @@ func TestHeatMeltsIceAndThickensAtmosphere(t *testing.T) {
 
 func TestWaterFlowsDownhill(t *testing.T) {
 	p := NewPlanet(8, 1)
-	a := Cell{Face: 4, I: 3, J: 3}
-	b := Cell{Face: 4, I: 4, J: 3}
+	a := Cell{Diamond: 4, I: 3, J: 3}
+	b := Cell{Diamond: 4, I: 4, J: 3}
 	ia, ib := p.Grid.Index(a), p.Grid.Index(b)
 	for i := range p.Tiles {
 		p.Tiles[i].Height, p.Tiles[i].Ice, p.Tiles[i].Water = 0.5, 0, 0

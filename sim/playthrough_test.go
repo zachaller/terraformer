@@ -163,7 +163,7 @@ func TestPlaythrough(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long-running")
 	}
-	p := NewPlanet(32, 1)
+	p := NewPlanet(25, 1)
 	b := &bot{t: t, p: p}
 	b.land()
 	reached := map[int]uint64{}

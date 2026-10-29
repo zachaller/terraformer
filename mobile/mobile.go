@@ -13,7 +13,7 @@ var g *game.Game
 
 func init() {
 	var err error
-	g, err = game.New(game.Options{Seed: uint64(time.Now().UnixNano()), GridSize: 32})
+	g, err = game.New(game.Options{Seed: uint64(time.Now().UnixNano()), GridSize: 25})
 	if err != nil {
 		panic(err)
 	}

@@ -2,7 +2,6 @@ package sim
 
 import (
 	"math"
-	"math/cmplx"
 	"testing"
 )
 
@@ -29,21 +28,86 @@ func TestCellDirRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCellFromDirAxes(t *testing.T) {
-	g := Grid{N: 4}
-	for _, tc := range []struct {
-		d    Vec3
-		face int
-	}{
-		{Vec3{1, 0.1, 0.2}, 0},
-		{Vec3{-1, 0.1, 0.2}, 1},
-		{Vec3{0.1, 1, 0.2}, 2},
-		{Vec3{0.1, -1, 0.2}, 3},
-		{Vec3{0.1, 0.2, 1}, 4},
-		{Vec3{0.1, 0.2, -1}, 5},
-	} {
-		if got := g.CellFromDir(tc.d).Face; got != tc.face {
-			t.Errorf("CellFromDir(%v).Face = %d, want %d", tc.d, got, tc.face)
+func TestPolesAndPentagons(t *testing.T) {
+	g := Grid{N: 6}
+	if got := g.CellFromDir(Vec3{Y: 1}); got.Diamond != NorthPole {
+		t.Errorf("CellFromDir(north) = %v", got)
+	}
+	if got := g.CellFromDir(Vec3{Y: -1}); got.Diamond != SouthPole {
+		t.Errorf("CellFromDir(south) = %v", got)
+	}
+	// Exactly twelve cells, the icosahedron's corners, have five neighbours;
+	// the rest have six.
+	fives := 0
+	for idx := range g.NumCells() {
+		switch n := len(g.NeighborIndices(idx)); n {
+		case 5:
+			fives++
+		case 6:
+		default:
+			t.Fatalf("%v has %d neighbours", g.CellAt(idx), n)
+		}
+	}
+	if fives != 12 {
+		t.Errorf("%d pentagons, want 12", fives)
+	}
+}
+
+func TestLatticeEdgesAgree(t *testing.T) {
+	// A lattice point on a diamond's edge is the same place whichever
+	// diamond it's addressed from.
+	g := Grid{N: 7}
+	n := g.N
+	for d := range Diamonds {
+		for i := 0; i <= n; i++ {
+			for j := 0; j <= n; j++ {
+				c := g.LatticeCell(d, i, j)
+				want := LatticeDir(d, float64(i)/float64(n), float64(j)/float64(n))
+				if got := g.DirFromCell(c); got.Sub(want).Len() > 1e-9 {
+					t.Fatalf("lattice (%d, %d, %d) is %v at %v, but that cell is at %v", d, i, j, c, want, got)
+				}
+			}
+		}
+	}
+}
+
+func TestLatticeWarpInverts(t *testing.T) {
+	for _, w := range [][3]float64{{1, 0, 0}, {0.2, 0.3, 0.5}, {1.0 / 3, 1.0 / 3, 1.0 / 3}, {0, 0.9, 0.1}} {
+		a, p, q := latticeWarp(w[0], w[1], w[2])
+		ga, gp, gq := latticeUnwarp(a, p, q)
+		if math.Abs(ga-w[0])+math.Abs(gp-w[1])+math.Abs(gq-w[2]) > 1e-9 {
+			t.Errorf("latticeUnwarp(latticeWarp(%v)) = %v, %v, %v", w, ga, gp, gq)
+		}
+	}
+}
+
+func TestTileAreasEven(t *testing.T) {
+	// Each tile's share of the sphere, estimated from sampling, stays
+	// within about 25% of the average.
+	g := Grid{N: 6}
+	hits := make([]int, g.NumCells())
+	const steps = 600
+	total := 0.0
+	w := make([]float64, g.NumCells())
+	for a := range steps {
+		z := 1 - 2*(float64(a)+0.5)/steps // even in z: equal-area bands
+		r := math.Sqrt(1 - z*z)
+		for b := range steps {
+			phi := 2 * math.Pi * (float64(b) + 0.5*float64(a%2)) / steps
+			idx := g.Index(g.CellFromDir(Vec3{r * math.Cos(phi), z, r * math.Sin(phi)}))
+			hits[idx]++
+			w[idx]++
+			total++
+		}
+	}
+	mean := total / float64(g.NumCells())
+	for idx, h := range hits {
+		want := 1.0
+		if len(g.NeighborIndices(idx)) == 5 {
+			want = 5.0 / 6 // pentagons are naturally smaller
+		}
+		if r := float64(h) / mean / want; r < 0.75 || r > 1.25 {
+			t.Errorf("%v covers %.2f of an average tile", g.CellAt(idx), r)
 		}
 	}
 }
@@ -70,7 +134,7 @@ func TestEveryCellReachable(t *testing.T) {
 }
 
 func TestNeighborsDistinctAndSymmetric(t *testing.T) {
-	for _, n := range []int{1, 2, 5, 32} {
+	for _, n := range []int{1, 2, 5, 25} {
 		g := Grid{N: n}
 		for idx := range g.NumCells() {
 			c := g.CellAt(idx)
@@ -97,10 +161,10 @@ func TestNeighborsDistinctAndSymmetric(t *testing.T) {
 }
 
 func TestNeighborsAreClose(t *testing.T) {
-	// Neighbours, including across face seams, should be about one cell
-	// apart: never more than ~2 cell widths (in radians) away.
-	g := Grid{N: 32}
-	maxAngle := 2 * (math.Pi / 2) / float64(g.N)
+	// Neighbours are about one tile apart: never more than 1.5 tile
+	// spacings.
+	g := Grid{N: 25}
+	maxAngle := 1.5 * g.TileAngle()
 	for idx := range g.NumCells() {
 		c := g.CellAt(idx)
 		d := g.DirFromCell(c)
@@ -110,106 +174,7 @@ func TestNeighborsAreClose(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestConformalSeries(t *testing.T) {
-	// confB inverts confA.
-	for _, w := range []complex128{0.01, 0.1i, -0.2 + 0.1i, 0.3} {
-		if got := series(confA[:], series(confB[:], w)); cmplx.Abs(got-w) > 1e-6 {
-			t.Errorf("A(B(%v)) = %v", w, got)
-		}
-	}
-	// The face centre, edge midpoints and corners land where they should,
-	// and face edges lie on the planes of the cube's edges.
-	for _, tc := range []struct {
-		u, v float64
-		want Vec3
-	}{
-		{0, 0, Vec3{0, 0, 1}},
-		{1, 0, Vec3{1, 0, 1}},
-		{0, -1, Vec3{0, -1, 1}},
-		{1, 1, Vec3{1, 1, 1}},
-		{-1, 1, Vec3{-1, 1, 1}},
-	} {
-		got := dirFromFaceUV(4, tc.u, tc.v).Normalize()
-		if got.Sub(tc.want.Normalize()).Len() > 1e-9 {
-			t.Errorf("dirFromFaceUV(4, %v, %v) = %v, want %v", tc.u, tc.v, got, tc.want.Normalize())
-		}
-	}
-	for k := 0; k <= 20; k++ {
-		d := dirFromFaceUV(4, 1, float64(k)/10-1)
-		if math.Abs(d.X-d.Z) > 1e-9 {
-			t.Errorf("edge point %v off the plane x = z", d)
-		}
-	}
-	// faceUV inverts dirFromFaceUV.
-	for i := range 19 {
-		for j := range 19 {
-			u, v := float64(i+1)/10-1, float64(j+1)/10-1
-			for face := range Faces {
-				f, gu, gv := faceUV(dirFromFaceUV(face, u, v))
-				if f != face || math.Abs(gu-u) > 1e-6 || math.Abs(gv-v) > 1e-6 {
-					t.Errorf("faceUV(dirFromFaceUV(%d, %v, %v)) = %d, %v, %v", face, u, v, f, gu, gv)
-				}
-			}
-		}
-	}
-}
-
-func TestConformalRightAngles(t *testing.T) {
-	// Grid lines cross at right angles everywhere outside the corner warp,
-	// including across seams.
-	g := Grid{N: 16}
-	for idx := range g.NumCells() {
-		c := g.CellAt(idx)
-		nb := g.Neighbors(c)
-		p := g.DirFromCell(c)
-		du := g.DirFromCell(nb[0]).Sub(g.DirFromCell(nb[1]))
-		dv := g.DirFromCell(nb[2]).Sub(g.DirFromCell(nb[3]))
-		if cos := math.Abs(du.Dot(dv)) / du.Len() / dv.Len(); cos > 0.05 && !nearCorner(g, c) {
-			t.Errorf("cell %v at %v: grid lines meet at cos %.3f", c, p, cos)
-		}
-	}
-}
-
-// nearCorner reports whether c is within cornerWarp's reach of a cube
-// corner, or on a neighbouring face just past it.
-func nearCorner(g Grid, c Cell) bool {
-	from := func(k int) float64 {
-		t := (float64(k)+0.5)/float64(g.N)*2 - 1
-		return 1 - math.Abs(t) - 2/float64(g.N)
-	}
-	return math.Hypot(max(from(c.I), 0), max(from(c.J), 0)) < 1
-}
-
-func TestCornerWarp(t *testing.T) {
-	for i := range 21 {
-		for j := range i + 1 {
-			a, b := float64(i)/20, float64(j)/20
-			wa, wb := cornerWarp(a, b)
-			if ua, ub := cornerUnwarp(wa, wb); math.Abs(ua-a) > 1e-9 || math.Abs(ub-b) > 1e-9 {
-				t.Errorf("cornerUnwarp(cornerWarp(%v, %v)) = %v, %v", a, b, ua, ub)
-			}
-			if wb > wa+1e-12 || wa > 1 || wb < 0 {
-				t.Errorf("cornerWarp(%v, %v) = %v, %v leaves the triangle", a, b, wa, wb)
-			}
-		}
-	}
-	// Tile areas stay within a factor of about 2 of each other.
-	g := Grid{N: 32}
-	area := func(i, j int) float64 {
-		p := func(i, j int) Vec3 {
-			return dirFromFaceUV(4, float64(i)/16-1, float64(j)/16-1).Normalize()
-		}
-		a, b, c, d := p(i, j), p(i+1, j), p(i, j+1), p(i+1, j+1)
-		return b.Sub(a).Cross(c.Sub(a)).Len() + b.Sub(d).Cross(c.Sub(d)).Len()
-	}
-	centre := area(g.N/2, g.N/2)
-	for i := range g.N {
-		for j := range g.N {
-			if r := area(i, j) / centre; r < 0.55 || r > 1.2 {
-				t.Errorf("tile %d,%d has %.2f times the area of a centre tile", i, j, r)
-			}
-		}
+	if want := math.Atan(2) / 25; math.Abs(g.TileAngle()-want) > 0.1*want {
+		t.Errorf("TileAngle() = %v, want about %v", g.TileAngle(), want)
 	}
 }

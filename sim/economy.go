@@ -183,7 +183,7 @@ func (p *Planet) Demolish(c Cell) error {
 func (p *Planet) LinkLength(a, b Cell) float64 {
 	da, db := p.Dir(a), p.Dir(b)
 	angle := math.Acos(math.Min(da.Dot(db), 1))
-	return angle / (math.Pi / 2 / float64(p.Grid.N))
+	return angle / p.Grid.TileAngle()
 }
 
 // LinkCost is the metal a link between a and b costs.

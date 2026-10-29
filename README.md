@@ -13,13 +13,12 @@ shape a barren planet until life takes hold. See
 
 ## Status: first playable (roadmap step 5)
 
-- A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default,
-  laid out with a conformal mapping so tile rows run straight across the
-  cube's seams),
+- A procedurally generated planet covered in a geodesic hex grid (6,252
+  tiles by default: hexagons plus the twelve pentagons a sphere needs),
   rendered as a 2D "shader globe": one screen quad and a Kage shader that
   ray-traces the sphere and looks each pixel up in a tile atlas. Tile colours
   are blended smoothly and broken up with noise, so the planet looks natural
-  rather than like a cube of squares; a tile grid appears only around the
+  rather than like a ball of hexagons; a tile grid appears only around the
   tapped tile while a build, link or demolish tool is active.
 - A running climate simulation: temperature by latitude, greenhouse effect,
   heat spreading between tiles, ice melting and freezing, water flowing
@@ -107,7 +106,7 @@ go run ./cmd/desktop -seed 7 -size 64
 |---|---|---|
 | `-seed` | 1 | Seed for a new planet (ignored when continuing a save); the same seed always gives the same planet |
 | `-no-save` | false | Don't load or save the game (saves live in your user config directory under `terraformer/`) |
-| `-size` | 32 | Tiles per cube-face edge (total tiles = 6 × size²) |
+| `-size` | 25 | Hex grid size: steps along each icosahedron edge (total tiles = 10 × size² + 2) |
 | `-view` | surface | Starting view: `surface`, `temp`, `water`, `life` or `industry` |
 | `-zoom` | 1 | Starting zoom |
 | `-demo-colony` | false | Land and build a small working colony facing the camera |

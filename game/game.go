@@ -34,7 +34,7 @@ const messageTime = 4
 // Options configure a new Game.
 type Options struct {
 	Seed     uint64
-	GridSize int // cells per cube face edge
+	GridSize int // hex grid size (sim.Grid.N)
 
 	// DemoHeaters puts fixed warmth on a ring of tiles around the equator.
 	DemoHeaters bool
@@ -151,11 +151,10 @@ func New(opts Options) (*Game, error) {
 
 // setPlanet switches the game to planet p, resetting selection and tools.
 func (g *Game) setPlanet(p *sim.Planet) {
-	n := p.Grid.N
 	g.planet = p
-	if g.atlas == nil || g.atlas.Bounds().Dx() != sim.Faces*(n+2) {
-		g.atlas = ebiten.NewImage(sim.Faces*(n+2), 2*(n+2))
-		g.atlasPix = make([]byte, sim.Faces*(n+2)*2*(n+2)*4)
+	if w, h := atlasSize(p.Grid); g.atlas == nil || g.atlas.Bounds().Dx() != w {
+		g.atlas = ebiten.NewImage(w, h)
+		g.atlasPix = make([]byte, w*h*4)
 		g.atlasSrc = atlasSources(p.Grid)
 	}
 	g.atlasDirty = true
@@ -462,25 +461,27 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		vs[i].ColorR, vs[i].ColorG, vs[i].ColorB, vs[i].ColorA = 1, 1, 1, 1
 	}
 
-	sel := []float32{-1, 0, 0}
+	// Tiles are passed to the shader by index; -1 means none.
+	grid := g.planet.Grid
+	sel := float32(-1)
 	if c := g.highlighted(); c != nil && g.pending == nil {
-		sel = []float32{float32(c.Face), float32(c.I), float32(c.J)}
+		sel = float32(grid.Index(*c))
 	}
-	ghost, ghostType, ghostOK, tint := []float32{-1, 0, 0}, float32(0), float32(1), []float32{0, 0, 0}
-	area := make([]float32, 3*maxAreaCells)
-	for i := range maxAreaCells {
-		area[3*i] = -1
+	ghost, ghostType, ghostOK, tint := float32(-1), float32(0), float32(1), []float32{0, 0, 0}
+	area := make([]float32, maxAreaCells)
+	for i := range area {
+		area[i] = -1
 	}
 	if bt, ok := g.placing(); ok && g.pending != nil {
 		c := *g.pending
-		ghost = []float32{float32(c.Face), float32(c.I), float32(c.J)}
+		ghost = float32(grid.Index(c))
 		ghostType = float32(bt) + 1
 		if g.planet.CanBuild(bt, c) != nil {
 			ghostOK = 0
 		}
 		steps, col := placementArea(bt)
-		for i, a := range areaCells(g.planet.Grid, c, steps) {
-			area[3*i], area[3*i+1], area[3*i+2] = float32(a.Face), float32(a.I), float32(a.J)
+		for i, a := range areaCells(grid, c, steps) {
+			area[i] = float32(grid.Index(a))
 		}
 		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
 	}
@@ -496,7 +497,9 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Row0":      vec3f(g.cam.rot[0]),
 		"Row1":      vec3f(g.cam.rot[1]),
 		"Row2":      vec3f(g.cam.rot[2]),
-		"N":         float32(g.planet.Grid.N),
+		"N":         float32(grid.N),
+		"TileAngle": float32(grid.TileAngle()),
+		"Diamond":   diamondUniform(),
 		"Selected":  sel,
 		"Time":      float32(g.ticks) / float32(ebiten.TPS()),
 		"Light":     vec3f(lightDir),
@@ -509,6 +512,19 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"AreaTint":  tint,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
+}
+
+// diamondUniform lists every diamond's corners O, P, Q and R in turn, for
+// the shader.
+func diamondUniform() []float32 {
+	var out []float32
+	for d := range sim.Diamonds {
+		o, p, q, r := sim.DiamondCorners(d)
+		for _, v := range []sim.Vec3{o, p, q, r} {
+			out = append(out, vec3f(v)...)
+		}
+	}
+	return out
 }
 
 // highlighted is the tile to highlight: the start of a link being made, or

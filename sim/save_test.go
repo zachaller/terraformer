@@ -7,8 +7,8 @@ import (
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	p, lander, ore := economyPlanet(t)
-	smelterCell := Cell{Face: 4, I: 8, J: 10}
-	heaterCell := Cell{Face: 4, I: 6, J: 8}
+	smelterCell := Cell{Diamond: 4, I: 8, J: 10}
+	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 	mustBuild(t, p, Mine, ore)
 	mustBuild(t, p, Smelter, smelterCell)
 	mustBuild(t, p, HeaterMachine, heaterCell)

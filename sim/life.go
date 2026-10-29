@@ -146,7 +146,7 @@ func (p *Planet) stepSpecies() {
 			for _, nb := range p.neighbors[idx] {
 				avg += p.Tiles[nb].Bio[s]
 			}
-			avg /= 4
+			avg /= float64(len(p.neighbors[idx]))
 			ready := established(s, t)
 			if ready {
 				l += SpeciesSpecs[s].Growth*l*(1-l) + speciesSpread*avg*(1-l)

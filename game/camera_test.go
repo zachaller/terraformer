@@ -92,18 +92,18 @@ func TestTurnTowardsCentresDirection(t *testing.T) {
 
 func TestAreaCellsFollowNeighbours(t *testing.T) {
 	g := sim.Grid{N: 8}
-	// A tile on a face seam: its neighbourhood crosses onto another face.
-	c := sim.Cell{Face: 4, I: 3, J: 7}
+	// A tile on a diamond's edge: its neighbourhood crosses onto another.
+	c := sim.Cell{Diamond: 4, I: 3, J: 8}
 	one := areaCells(g, c, 1)
-	if len(one) != 4 {
-		t.Fatalf("one step from %v: %d cells, want 4", c, len(one))
+	if len(one) != 6 {
+		t.Fatalf("one step from %v: %d cells, want 6", c, len(one))
 	}
 	for i, nb := range g.Neighbors(c) {
 		if one[i] != nb {
 			t.Fatalf("one step from %v = %v, want its neighbours %v", c, one, g.Neighbors(c))
 		}
 	}
-	if two := areaCells(g, c, 2); len(two) != 12 {
-		t.Fatalf("two steps from %v: %d cells, want 12", c, len(two))
+	if two := areaCells(g, c, 2); len(two) != 18 {
+		t.Fatalf("two steps from %v: %d cells, want 18", c, len(two))
 	}
 }

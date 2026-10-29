@@ -4,8 +4,8 @@ import "testing"
 
 func TestDiagnose(t *testing.T) {
 	p, lander, ore := economyPlanet(t)
-	smelterCell := Cell{Face: 4, I: 8, J: 10}
-	heaterCell := Cell{Face: 4, I: 6, J: 8}
+	smelterCell := Cell{Diamond: 4, I: 8, J: 10}
+	heaterCell := Cell{Diamond: 4, I: 6, J: 8}
 
 	// Unlinked heater: no power.
 	heater := mustBuild(t, p, HeaterMachine, heaterCell)
@@ -50,7 +50,7 @@ func TestDiagnose(t *testing.T) {
 
 func TestDiagnoseOutputFull(t *testing.T) {
 	p, _, ore := economyPlanet(t)
-	solarCell := Cell{Face: 4, I: 10, J: 10}
+	solarCell := Cell{Diamond: 4, I: 10, J: 10}
 	mine := mustBuild(t, p, Mine, ore)
 	mustBuild(t, p, SolarPanel, solarCell)
 	mustLink(t, p, ore, solarCell)
@@ -78,12 +78,12 @@ func TestDiagnoseRunning(t *testing.T) {
 func TestNearestPolluter(t *testing.T) {
 	p, _, ore := economyPlanet(t)
 	mustBuild(t, p, Mine, ore)
-	mustBuild(t, p, SolarPanel, Cell{Face: 4, I: 9, J: 8})
-	b, d := p.NearestPolluter(Cell{Face: 4, I: 8, J: 8}, 4)
+	mustBuild(t, p, SolarPanel, Cell{Diamond: 4, I: 9, J: 8})
+	b, d := p.NearestPolluter(Cell{Diamond: 4, I: 8, J: 8}, 4)
 	if b == nil || b.Type != Mine || d < 1.5 || d > 2.5 {
 		t.Fatalf("nearest polluter = %v at %.1f, want the mine ~2 tiles away", b, d)
 	}
-	if b, _ := p.NearestPolluter(Cell{Face: 1, I: 8, J: 8}, 4); b != nil {
+	if b, _ := p.NearestPolluter(Cell{Diamond: 7, I: 8, J: 8}, 4); b != nil {
 		t.Fatal("found a polluter on the far side of the planet")
 	}
 }

@@ -78,23 +78,28 @@ var (
 	}
 )
 
-// The tile atlas the shader reads is (6·P)×(2·P) pixels, where P = N+2: one
-// P×P block per cube face, side by side. Each block holds the face's N×N
-// tiles plus a one-tile border copied from the neighbouring faces, so the
-// shader can blend colours smoothly across face seams. The top half holds
-// tile colours; the bottom half holds building data (red: building type + 1,
-// or 0 for none; green: activity; blue: sim.StatusKind).
+// The tile atlas the shader reads is (10·P)×(3·P) pixels, where P = N+1:
+// one P×P block per diamond of the hex grid (see sim/grid.go), side by side,
+// with a pixel for every lattice point (i, j) in [0, N]², including those on
+// the diamond's edges, which belong to neighbouring diamonds. That way every
+// lattice triangle the shader blends across has all three corners in one
+// block. Three bands of rows hold, for the tile at each lattice point: its
+// colour; building data (red: building type + 1, or 0 for none; green:
+// activity; blue: sim.StatusKind); and its tile index (red + 256·green), so
+// the shader can match tiles to the selection and placement preview.
 
-// atlasSources maps each pixel in the top half of the atlas to the tile whose
-// colour it shows.
+// atlasSize returns the atlas's width and height for grid g.
+func atlasSize(g sim.Grid) (int, int) { return sim.Diamonds * (g.N + 1), 3 * (g.N + 1) }
+
+// atlasSources maps each pixel in a band of the atlas to its tile's index.
 func atlasSources(g sim.Grid) []int32 {
-	n := g.N
-	p := n + 2
-	src := make([]int32, sim.Faces*p*p)
-	for f := range sim.Faces {
-		for j := -1; j <= n; j++ {
-			for i := -1; i <= n; i++ {
-				src[(j+1)*sim.Faces*p+f*p+i+1] = int32(g.Index(g.Wrap(f, i, j)))
+	p := g.N + 1
+	w, _ := atlasSize(g)
+	src := make([]int32, w*p)
+	for d := range sim.Diamonds {
+		for j := range p {
+			for i := range p {
+				src[j*w+d*p+i] = int32(g.Index(g.LatticeCell(d, i, j)))
 			}
 		}
 	}
@@ -104,30 +109,21 @@ func atlasSources(g sim.Grid) []int32 {
 // fillAtlas writes the planet into pix, the atlas's RGBA pixels, using src
 // from atlasSources.
 func fillAtlas(pix []byte, src []int32, p *sim.Planet, v viewMode) {
-	half := len(pix) / 2
 	colors := make([]rgb, len(p.Tiles))
 	for idx, t := range p.Tiles {
 		colors[idx] = tileColor(t, v)
 	}
-	for k, idx := range src {
-		col := colors[idx]
-		pix[k*4] = uint8(col[0])
-		pix[k*4+1] = uint8(col[1])
-		pix[k*4+2] = uint8(col[2])
-		pix[k*4+3] = 255
-	}
-	clear(pix[half:])
-	for k := 3; k < half; k += 4 {
-		pix[half+k] = 255
-	}
-	n := p.Grid.N
-	stride := sim.Faces * (n + 2)
+	type bdata struct{ typ, act, status uint8 }
+	buildings := make([]bdata, len(p.Tiles))
 	for _, b := range p.Buildings() {
-		c := p.Grid.CellAt(b.Tile)
-		off := half + ((c.J+1)*stride+c.Face*(n+2)+c.I+1)*4
-		pix[off] = uint8(b.Type) + 1
-		pix[off+1] = uint8(b.Activity * 255)
-		pix[off+2] = uint8(p.Diagnose(b).Kind)
+		buildings[b.Tile] = bdata{uint8(b.Type) + 1, uint8(b.Activity * 255), uint8(p.Diagnose(b).Kind)}
+	}
+	band := len(src) * 4
+	for k, idx := range src {
+		col, b := colors[idx], buildings[idx]
+		copy(pix[k*4:], []byte{uint8(col[0]), uint8(col[1]), uint8(col[2]), 255})
+		copy(pix[band+k*4:], []byte{b.typ, b.act, b.status, 255})
+		copy(pix[2*band+k*4:], []byte{uint8(idx), uint8(idx >> 8), 0, 255})
 	}
 }
 

@@ -1,0 +1,32 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.zachaller.terraformer"
+    compileSdk 36
+    ndkVersion "29.0.14206865"
+
+    defaultConfig {
+        applicationId "com.zachaller.terraformer"
+        minSdk 23
+        targetSdk 36
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    packaging {
+        // Compress the Go native libraries; makes the APK much smaller to download.
+        jniLibs.useLegacyPackaging = true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Built from the Go code by scripts/build-android.sh (ebitenmobile bind).
+    implementation files("libs/terraformer.aar")
+}

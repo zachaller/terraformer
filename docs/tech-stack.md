@@ -137,7 +137,7 @@ capacity-limited routing turns out to matter for gameplay.
 
 1. ✅ **Globe prototype (desktop):** rotating shader planet, drag to rotate, pinch or
    scroll to zoom, tap to highlight a tile.
-2. **Globe prototype on a phone:** same thing via `ebitenmobile`; check feel and
+2. 🔄 **Globe prototype on a phone:** (debug APK builds; awaiting on-device test) same thing via `ebitenmobile`; check feel and
    frame rate.
 3. **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
 4. **Economy core:** a mine, a smelter, a power source and links between them;

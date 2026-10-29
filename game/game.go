@@ -38,6 +38,7 @@ type Game struct {
 	planet *sim.Planet
 	atlas  *ebiten.Image
 	shader *ebiten.Shader
+	hud    *ebiten.Image
 
 	cam      camera
 	input    pointerInput
@@ -152,7 +153,18 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 		t := g.planet.Tile(*c)
 		msg += fmt.Sprintf("\nSelected: face %d (%d, %d)  %v  height %+.2f", c.Face, c.I, c.J, t.Kind, t.Height)
 	}
-	ebitenutil.DebugPrint(screen, msg)
+	// The debug font is fixed-size, so draw it offscreen and scale it up to
+	// stay readable on high-DPI phone screens.
+	if g.hud == nil {
+		g.hud = ebiten.NewImage(420, 52)
+	}
+	g.hud.Clear()
+	ebitenutil.DebugPrint(g.hud, msg)
+	s := ebiten.Monitor().DeviceScaleFactor()
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(s, s)
+	op.GeoM.Translate(8*s, 8*s)
+	screen.DrawImage(g.hud, op)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

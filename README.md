@@ -39,6 +39,23 @@ go run ./cmd/desktop -seed 7 -size 64
 Headless screenshot (e.g. on a server):
 `xvfb-run -a go run ./cmd/desktop -screenshot shot.png`
 
+## Running on Android
+
+Build a debug APK (signed with a debug key, for sideloading):
+
+```sh
+export ANDROID_HOME=/path/to/android-sdk            # platform 36, build-tools
+export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/<version>
+go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.10.5
+scripts/build-android.sh
+```
+
+The script binds the Go game into `android/app/libs/terraformer.aar` with
+`ebitenmobile`, then runs Gradle. The APK lands in
+`android/app/build/outputs/apk/debug/app-debug.apk`. With a phone connected
+over USB (developer options and USB debugging on):
+`adb install -r android/app/build/outputs/apk/debug/app-debug.apk`
+
 ## Tests
 
 ```sh
@@ -51,5 +68,8 @@ go test ./...
 sim/          pure Go simulation: cube-sphere grid, planet generation (no engine imports)
 game/         Ebitengine front end: camera, input, planet shader, HUD
 cmd/desktop/  desktop entry point
+mobile/       Android entry point, bound by ebitenmobile
+android/      thin Android project (one Activity hosting the game view)
+scripts/      build scripts
 docs/         design and technical docs
 ```

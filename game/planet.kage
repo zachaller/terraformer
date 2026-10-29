@@ -281,6 +281,10 @@ func paint(dst vec4, c vec3, m float) vec4 {
 	return vec4(mix(dst.rgb, c, m), max(dst.a, m))
 }
 
+// artScale shrinks the building designs, drawn for a square of side 1, to
+// fit inside a hex tile, which reaches only about 0.5 from its centre.
+const artScale = 1.3
+
 // building returns the colour (rgb) and coverage (a) of building type bt at
 // tile-local position p (each axis in [-0.5, 0.5], y north). act is how hard
 // it's running (0 to 1) and aa is a pixel's size in tile units. Types follow
@@ -479,11 +483,12 @@ func building(bt float, p vec2, act float, aa float) vec4 {
 // Status codes follow sim.StatusKind; the glyph's shape carries the meaning.
 func badge(st float, p vec2, aa float) vec4 {
 	o := vec4(0)
-	if st < 0.5 {
+	if st < 0.5 || st > 6.5 { // running, or a comet on its way
 		return o
 	}
-	c := vec2(0.33, 0.33)
-	r := 0.15
+	// Inside the hex: tiles are only about half a tile-spacing in radius.
+	c := vec2(0.23, 0.23)
+	r := 0.13
 	q := (p - c) / r
 	qa := aa / r
 	bg := vec3(0.95, 0.65, 0.25) // short of power: amber
@@ -627,7 +632,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	if bt > 0 {
 		act := bdata.g
 		st := floor(bdata.b*255 + 0.5)
-		b := building(bt, lp, act, aa)
+		b := building(bt, lp*artScale, act, aa*artScale)
 		// Stopped buildings fade to grey; short-of-power ones dim a little.
 		if st > 1.5 {
 			grey := dot(b.rgb, vec3(0.3, 0.59, 0.11))
@@ -654,7 +659,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 			}
 		}
 		if tile == Ghost {
-			gb := building(GhostType, lp, 1, aa)
+			gb := building(GhostType, lp*artScale, 1, aa*artScale)
 			base = mix(base, gb.rgb, gb.a*0.75)
 			// Outline: amber where it can go, red where it can't.
 			outline := vec3(1, 0.83, 0.42)

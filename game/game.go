@@ -549,20 +549,39 @@ func (g *Game) gridAmount() float64 {
 func (g *Game) drawLinks(screen *ebiten.Image) {
 	p := g.planet
 	s := float32(ebiten.Monitor().DeviceScaleFactor())
-	colour := func(tile int) color.RGBA {
-		if p.NetworkOf(p.BuildingAt(p.Grid.CellAt(tile))).PowerSatisfaction() < 1 {
-			return color.RGBA{255, 150, 40, 255}
+	// Links stay in the background, thin and faint, except while working
+	// with them (linking, placing, the Industry view) or for the network of
+	// the building being inspected.
+	_, placing := g.placing()
+	busy := g.tool == toolLink || placing || g.view == viewIndustry
+	var focus *sim.Network
+	if g.inspectOpen() {
+		if b := p.BuildingAt(*g.selected); b != nil {
+			focus = p.NetworkOf(b)
 		}
-		return color.RGBA{90, 220, 255, 255}
+	}
+	style := func(tile int) (color.RGBA, float32) {
+		n := p.NetworkOf(p.BuildingAt(p.Grid.CellAt(tile)))
+		c := color.RGBA{90, 220, 255, 255}
+		if n.PowerSatisfaction() < 1 {
+			c = color.RGBA{255, 150, 40, 255}
+		}
+		if busy || n == focus {
+			return c, 2 * s
+		}
+		return withAlpha(c, 90), 1.2 * s
 	}
 	for _, l := range p.Links() {
-		g.drawArc(screen, p.Dir(p.Grid.CellAt(l[0])), p.Dir(p.Grid.CellAt(l[1])), 2*s, colour(l[0]), false)
+		c, w := style(l[0])
+		g.drawArc(screen, p.Dir(p.Grid.CellAt(l[0])), p.Dir(p.Grid.CellAt(l[1])), w, c, false)
 	}
-	// Pylons' connections without links: faint spokes.
+	// Pylons' connections without links: spokes, only while they matter.
 	for _, sp := range p.Spokes() {
-		c := colour(sp[0])
-		c.A = 90
-		g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, c, false)
+		if !busy && p.NetworkOf(p.BuildingAt(p.Grid.CellAt(sp[0]))) != focus {
+			continue
+		}
+		c, _ := style(sp[0])
+		g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, withAlpha(c, 90), false)
 	}
 	// The link a building being placed will make.
 	if bt, ok := g.placing(); ok && g.pending != nil && p.CanBuild(bt, *g.pending) == nil {

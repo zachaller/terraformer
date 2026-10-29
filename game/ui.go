@@ -144,7 +144,7 @@ func (g *Game) buttons() []button {
 
 	if g.menuOpen {
 		x0, w := row(menuColumns)
-		rows := (len(menuTools) + menuColumns - 1) / menuColumns
+		rows := (len(menuTools) + 1 + menuColumns - 1) / menuColumns // +1 for New planet
 		for i, t := range menuTools {
 			col, rowIdx := i%menuColumns, i/menuColumns
 			bs = append(bs, button{
@@ -157,6 +157,27 @@ func (g *Game) buttons() []button {
 				action: func() { g.setTool(t) },
 			})
 		}
+		i := len(menuTools)
+		label := "New planet"
+		if g.ticks < g.confirmNewUntil {
+			label = "Sure? Tap"
+		}
+		bs = append(bs, button{
+			label: label,
+			x:     x0 + float64(i%menuColumns)*(w+gap),
+			y:     y - float64(rows-i/menuColumns)*(h+gap),
+			w:     w,
+			h:     h,
+			action: func() {
+				if g.ticks < g.confirmNewUntil {
+					g.confirmNewUntil = 0
+					g.newPlanet()
+					return
+				}
+				g.confirmNewUntil = g.ticks + 3*ebiten.TPS()
+				g.showMessage("Tap New planet again to abandon this planet and start over")
+			},
+		})
 	}
 	return bs
 }

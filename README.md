@@ -8,7 +8,7 @@ shape a barren planet until life takes hold. See
 ![After warming: seas and microbes](docs/images/terraformed.png)
 ![A small colony: lander, solar, mine, smelter and heater](docs/images/colony.png)
 
-## Status: economy core (roadmap step 4)
+## Status: first playable (roadmap step 5)
 
 - A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default),
   rendered as a 2D "shader globe": one screen quad and a Kage shader that
@@ -22,6 +22,13 @@ shape a barren planet until life takes hold. See
   clean. Melting ice releases CO₂, which thickens the atmosphere and warms the
   whole planet: heat enough of it and the planet tips into runaway warming.
 - A colony economy: choose a landing site, then build and link machines.
+- Goals that guide you from landing to a living world, shown at the top of
+  the screen with a hint and progress: Land → Dig for ore → Make metal →
+  Warm the ground → Liquid water → First life → Spread life → Thicken the
+  air → Thaw → Living world.
+- Automatic saving every 30 seconds, when the app goes into the background,
+  and when the desktop window closes. **Tool → New planet** (tap twice)
+  starts over on a fresh planet.
 
 | Building | Cost (metal) | Does |
 |---|---|---|
@@ -47,7 +54,7 @@ buffer) pulse red.
 | Rotate | Drag | Drag with left mouse button |
 | Zoom | Pinch | Mouse wheel |
 | Use the current tool on a tile | Tap | Click |
-| Open the build menu (Inspect, Link, Demolish, buildings) | **Tool** button | `B`, or `1`–`7` to pick directly |
+| Open the build menu (Inspect, Link, Demolish, buildings, New planet) | **Tool** button | `B`, or `1`–`7` to pick a tool directly |
 | Link buildings | Link tool: tap one building, then another (chains continue from the last) | same |
 | Cycle view (Surface / Temperature / Water / Life / Industry) | **View** button | `V` |
 | Cycle speed (Paused / 1x / 4x) | **Speed** button | `Space` pause, `F` fast |
@@ -70,7 +77,8 @@ go run ./cmd/desktop -seed 7 -size 64
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-seed` | 1 | Planet seed; the same seed always gives the same planet |
+| `-seed` | 1 | Seed for a new planet (ignored when continuing a save); the same seed always gives the same planet |
+| `-no-save` | false | Don't load or save the game (saves live in your user config directory under `terraformer/`) |
 | `-size` | 32 | Tiles per cube-face edge (total tiles = 6 × size²) |
 | `-view` | surface | Starting view: `surface`, `temp`, `water`, `life` or `industry` |
 | `-zoom` | 1 | Starting zoom |
@@ -104,7 +112,9 @@ over USB (developer options and USB debugging on):
 ## Tests
 
 ```sh
-go test ./...
+go test ./...          # includes a bot playthrough of every goal (~10s)
+go test -short ./...   # skips it
+go test ./sim -run Playthrough -v   # shows the bot's pacing
 ```
 
 ## Layout

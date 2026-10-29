@@ -78,6 +78,11 @@ type Planet struct {
 	co2PerIce float64
 
 	eco economy
+	// goalsDone is how many of Goals have been completed, in order.
+	goalsDone int
+	// startAvgTemp is the average temperature at generation, for the Thaw
+	// goal's progress.
+	startAvgTemp float64
 
 	// Scratch buffers reused by Step.
 	nextTemp, nextLife, flow []float64
@@ -85,7 +90,7 @@ type Planet struct {
 
 const (
 	startAtmosphere = 0.6 // kPa, about Mars today
-	maxReleasedCO2  = 300 // kPa released if every bit of starting ice melts
+	maxReleasedCO2  = 150 // kPa released if every bit of starting ice melts
 )
 
 // NewPlanet generates a frozen, barren starting planet from seed. The same
@@ -123,6 +128,7 @@ func NewPlanet(n int, seed uint64) *Planet {
 	for idx := range p.Tiles {
 		p.Tiles[idx].Temp = p.equilibrium(idx)
 	}
+	p.startAvgTemp = p.Stats().AvgTemp
 	return p
 }
 

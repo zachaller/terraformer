@@ -1,6 +1,6 @@
 # Terraformer: Tech Stack & Architecture
 
-Status: decided. Roadmap steps 1–4 are built; see README.md.
+Status: decided. Roadmap steps 1–5 are built; see README.md.
 
 ## The game in one paragraph
 
@@ -146,6 +146,19 @@ capacity-limited routing turns out to matter for gameplay.
 - Pollution is emitted by mines and smelters, drifts to neighbours and decays;
   above 0.25 a tile can't support life.
 
+### First playable (step 5)
+
+- **Goals** (`sim/goals.go`): an ordered list of milestones, each with a hint
+  and a progress function; completed in order, checked every step, saved.
+- **Saving** (`sim/save.go`, `game/save.go`): gzip-compressed gob of the
+  dynamic state; terrain-derived data is regenerated from seed and size.
+  Written via a temp file and rename. Saved every 30 s, on Android `onPause`,
+  and on desktop window close.
+- **Balance** is checked by `TestPlaythrough`, a bot that plays every goal
+  without shortcuts. Current pacing for the bot at 1x: first life ~1 min,
+  1% life ~8 min, 2 kPa ~13 min, thaw ~19 min, living world ~20 min. A human
+  is slower; the test fails if the planet becomes trivially easy to thaw.
+
 ## Play Store checklist (for later)
 
 - Google Play developer account (one-time $25 fee).
@@ -165,7 +178,7 @@ capacity-limited routing turns out to matter for gameplay.
 3. ✅ **Sim core:** grid, tile types, a couple of spread rules, global stats, tests.
 4. ✅ **Economy core:** a mine, a smelter, a power source and links between them;
    network flow in `sim/` with tests.
-5. **First playable:** build a small production chain that powers one
+5. ✅ **First playable:** build a small production chain that powers one
    terraforming machine, and watch the planet change and the first life appear.
 6. **Content and polish:** more buildings, biomes, art, audio, UI.
 7. **Release pipeline:** CI AAB build, closed test, Play Store listing.

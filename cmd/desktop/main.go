@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/zachaller/terraformer/game"
@@ -12,7 +14,7 @@ import (
 
 func main() {
 	var opts game.Options
-	flag.Uint64Var(&opts.Seed, "seed", 1, "planet seed")
+	flag.Uint64Var(&opts.Seed, "seed", 1, "planet seed for a new game")
 	flag.IntVar(&opts.GridSize, "size", 32, "tiles per cube face edge")
 	flag.BoolVar(&opts.DemoHeaters, "demo-heaters", false, "put fixed warmth on a ring of tiles around the equator")
 	flag.BoolVar(&opts.DemoColony, "demo-colony", false, "land and build a small working colony")
@@ -25,7 +27,12 @@ func main() {
 	flag.IntVar(&winW, "width", 1024, "window width")
 	flag.IntVar(&winH, "height", 720, "window height")
 	flag.StringVar(&safe, "safe-area", "", "simulate phone system bars: insets in pixels as left,top,right,bottom")
+	flag.BoolVar(&opts.NoSave, "no-save", false, "don't load or save the game")
 	flag.Parse()
+
+	if dir, err := os.UserConfigDir(); err == nil {
+		game.SetSaveDir(filepath.Join(dir, "terraformer"))
+	}
 
 	if safe != "" {
 		var l, t, r, b float64
@@ -44,5 +51,8 @@ func main() {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
+	}
+	if err := g.SaveNow(); err != nil {
+		log.Printf("saving: %v", err)
 	}
 }

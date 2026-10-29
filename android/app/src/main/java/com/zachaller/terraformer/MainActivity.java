@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Seq.setContext(getApplicationContext());
+        Mobile.setDataDir(getFilesDir().getAbsolutePath());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
@@ -106,6 +107,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        Mobile.save();
         view.suspendGame();
     }
 

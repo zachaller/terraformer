@@ -42,6 +42,7 @@ func (n *Network) PowerSatisfaction() float64 {
 // economy is the colony's buildings, links and stores.
 type economy struct {
 	Stores    Amounts
+	Produced  Amounts             // total ever produced, for goals
 	buildings []*Building         // in construction order
 	at        map[int]*Building   // by tile index
 	links     map[[2]int]struct{} // tile index pairs, lower index first
@@ -86,6 +87,9 @@ func (p *Planet) NetworkOf(b *Building) *Network {
 	return p.eco.networks[b.network]
 }
 
+// Produced returns the total of each resource produced so far.
+func (p *Planet) Produced() Amounts { return p.eco.Produced }
+
 // Stores returns the colony's stockpile.
 func (p *Planet) Stores() Amounts { return p.eco.Stores }
 
@@ -112,6 +116,7 @@ func (p *Planet) Land(c Cell) error {
 	}
 	p.place(Lander, p.Grid.Index(c))
 	p.eco.Stores[Metal] = startingMetal
+	p.checkGoals()
 	return nil
 }
 
@@ -319,6 +324,7 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 	for r := range NumResources {
 		b.In[r] -= s.Inputs[r] * f
 		b.Out[r] += s.Outputs[r] * f
+		p.eco.Produced[r] += s.Outputs[r] * f
 	}
 	if s.Extracts {
 		t.Ore = math.Max(t.Ore-s.Outputs[Ore]*f, 0)

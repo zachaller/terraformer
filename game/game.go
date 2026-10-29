@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -48,6 +49,10 @@ type Options struct {
 	// View is the starting view: surface, temperature, water or life.
 	View string
 
+	// NoSave stops the game loading or saving the save file. Demo and
+	// screenshot runs never save either way.
+	NoSave bool
+
 	// ScreenshotPath, if set, selects the tile at the centre of the screen,
 	// saves a PNG of the first frames to this path and exits. Used to check
 	// rendering without a display.
@@ -56,6 +61,10 @@ type Options struct {
 
 // Game implements ebiten.Game.
 type Game struct {
+	// mu guards the game state: Update and Draw hold it, and so does
+	// SaveNow, which the platform may call from another thread.
+	mu sync.Mutex
+
 	opts   Options
 	planet *sim.Planet
 	shader *ebiten.Shader
@@ -80,6 +89,10 @@ type Game struct {
 	speed    int     // index into speeds
 	stepDebt float64 // fractional simulation steps owed
 
+	goalsSeen       int // goals completed, as last announced
+	lastSave        int // tick of the last save
+	confirmNewUntil int // a second "New planet" tap before this tick confirms
+
 	w, h  int
 	ticks int
 	done  bool
@@ -92,19 +105,13 @@ func New(opts Options) (*Game, error) {
 		return nil, fmt.Errorf("compiling planet shader: %w", err)
 	}
 	p := sim.NewPlanet(opts.GridSize, opts.Seed)
-	n := p.Grid.N
 	g := &Game{
-		opts:       opts,
-		planet:     p,
-		shader:     shader,
-		atlas:      ebiten.NewImage(sim.Faces*(n+2), 2*(n+2)),
-		atlasPix:   make([]byte, sim.Faces*(n+2)*2*(n+2)*4),
-		atlasSrc:   atlasSources(p.Grid),
-		atlasDirty: true,
-		cam:        newCamera(),
-		speed:      1,
-		tool:       toolLand,
+		opts:   opts,
+		shader: shader,
+		cam:    newCamera(),
+		speed:  1,
 	}
+	g.setPlanet(p)
 	for v := range numViews {
 		if strings.EqualFold(opts.View, v.String()) || (opts.View == "temp" && v == viewTemp) {
 			g.view = v
@@ -123,15 +130,41 @@ func New(opts Options) (*Game, error) {
 	for range opts.DemoSteps {
 		p.Step()
 	}
+	g.goalsSeen = p.GoalsDone()
 	return g, nil
 }
 
+// setPlanet switches the game to planet p, resetting selection and tools.
+func (g *Game) setPlanet(p *sim.Planet) {
+	n := p.Grid.N
+	g.planet = p
+	if g.atlas == nil || g.atlas.Bounds().Dx() != sim.Faces*(n+2) {
+		g.atlas = ebiten.NewImage(sim.Faces*(n+2), 2*(n+2))
+		g.atlasPix = make([]byte, sim.Faces*(n+2)*2*(n+2)*4)
+		g.atlasSrc = atlasSources(p.Grid)
+	}
+	g.atlasDirty = true
+	g.selected, g.linkFrom = nil, nil
+	g.menuOpen = false
+	g.tool = toolLand
+	if p.Landed() {
+		g.tool = toolInspect
+	}
+	g.goalsSeen = p.GoalsDone()
+}
+
 func (g *Game) Update() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.done {
 		return ebiten.Termination
 	}
 	g.ticks++
 	g.layoutCamera()
+	if g.ticks == 1 && g.savingEnabled() {
+		g.loadSave()
+		g.lastSave = g.ticks
+	}
 
 	g.handleKeys()
 	gs := g.input.update()
@@ -155,9 +188,6 @@ func (g *Game) Update() error {
 			g.selected = &c
 		}
 	}
-	if g.ticks == 1 && !g.planet.Landed() {
-		g.showMessage("Tap a tile to choose your landing site")
-	}
 
 	g.stepDebt += speeds[g.speed].steps / float64(ebiten.TPS())
 	for g.stepDebt >= 1 {
@@ -165,7 +195,30 @@ func (g *Game) Update() error {
 		g.stepDebt--
 		g.atlasDirty = true
 	}
+	g.announceGoals()
+	if g.savingEnabled() {
+		g.autosave()
+	}
 	return nil
+}
+
+// announceGoals shows a message when goals are completed.
+func (g *Game) announceGoals() {
+	done := g.planet.GoalsDone()
+	if done <= g.goalsSeen {
+		return
+	}
+	g.goalsSeen = done
+	if done == 0 {
+		return
+	}
+	msg := "Goal complete: " + sim.Goals[done-1].Name + "!"
+	if done < len(sim.Goals) {
+		msg += " Next: " + sim.Goals[done].Name
+	} else {
+		msg += " Every goal done. The planet is alive"
+	}
+	g.showMessage(msg)
 }
 
 // handleKeys provides desktop shortcuts for the on-screen buttons.
@@ -281,6 +334,8 @@ func (g *Game) selectAt(x, y float64) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.layoutCamera()
 	if g.atlasDirty {
 		fillAtlas(g.atlasPix, g.atlasSrc, g.planet, g.view)
@@ -390,16 +445,28 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	stores := p.Stores()
 	msg := fmt.Sprintf("Day %d   Atmosphere %.2f kPa   Avg %.1fC   Life %.1f%%\nMetal %.1f   Ore %.1f   Ice %.0f   Water %.1f   FPS %.0f",
 		p.Ticks/10, p.Atmosphere, st.AvgTemp, st.LifeCover*100, stores[sim.Metal], stores[sim.Ore], st.Ice, st.Water, ebiten.ActualFPS())
+	msg += "\nGoal: " + p.GoalSummary()
+	if goal, _, ok := p.CurrentGoal(); ok {
+		for _, line := range wrap(goal.Hint, hudColumns-2) {
+			msg += "\n  " + line
+		}
+	}
 	if c := g.selected; c != nil {
 		msg += "\n\n" + g.tileInfo(*c)
 	}
 	if g.ticks < g.msgUntil {
-		msg += "\n\n> " + g.message
+		for i, line := range wrap(g.message, hudColumns-2) {
+			if i == 0 {
+				msg += "\n\n> " + line
+			} else {
+				msg += "\n  " + line
+			}
+		}
 	}
 	// The debug font is fixed-size, so draw it offscreen and scale it up to
 	// stay readable on high-DPI phone screens.
 	if g.hud == nil {
-		g.hud = ebiten.NewImage(480, 160)
+		g.hud = ebiten.NewImage(6*hudColumns+12, 16*20)
 	}
 	g.hud.Clear()
 	ebitenutil.DebugPrint(g.hud, msg)
@@ -470,6 +537,31 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	g.w = int(math.Ceil(float64(outsideWidth) * s))
 	g.h = int(math.Ceil(float64(outsideHeight) * s))
 	return g.w, g.h
+}
+
+// hudColumns is how many characters fit across the HUD: chosen so it still
+// fits a narrow phone screen in portrait.
+const hudColumns = 58
+
+// wrap breaks s into lines of at most width characters, at spaces.
+func wrap(s string, width int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(s) {
+		switch {
+		case line == "":
+			line = word
+		case len(line)+1+len(word) <= width:
+			line += " " + word
+		default:
+			lines = append(lines, line)
+			line = word
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
 }
 
 func vec3f(v sim.Vec3) []float32 { return []float32{float32(v.X), float32(v.Y), float32(v.Z)} }

@@ -16,8 +16,8 @@ const (
 	lifeGrowth       = 0.01
 	lifeSpread       = 0.02
 	lifeDieback      = 0.01
-	lifeEmerge       = 0.002 // chance per step that life appears on a habitable, lifeless tile
-	lifeSeed         = 0.05  // coverage when life first appears
+	lifeEmerge       = 0.0005 // chance per step that life appears on a habitable, lifeless tile
+	lifeSeed         = 0.05   // coverage when life first appears
 	minLifeWater     = 0.01
 	minLifeTemp      = -5.0
 	maxLifeTemp      = 60.0
@@ -37,6 +37,7 @@ func (p *Planet) Step() {
 	p.stepPollution()
 	p.stepLife()
 	p.Ticks++
+	p.checkGoals()
 }
 
 // equilibrium is the temperature tile idx settles towards without machines:
@@ -203,6 +204,7 @@ type Stats struct {
 	AvgTemp    float64
 	Ice, Water float64 // totals
 	LifeCover  float64 // fraction of tiles with any life
+	LifeMean   float64 // average life coverage over all tiles
 }
 
 func (p *Planet) Stats() Stats {
@@ -215,9 +217,11 @@ func (p *Planet) Stats() Stats {
 		if t.Life > 0 {
 			alive++
 		}
+		s.LifeMean += t.Life
 	}
 	n := float64(len(p.Tiles))
 	s.AvgTemp /= n
 	s.LifeCover = float64(alive) / n
+	s.LifeMean /= n
 	return s
 }

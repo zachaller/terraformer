@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"math"
 	"os"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/zachaller/terraformer/sim"
 )
 
@@ -388,7 +386,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.atlasDirty = false
 	}
 	g.drawPlanet(screen)
-	g.drawLinks(screen)
 	g.runUI(g.newUI(screen))
 
 	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {
@@ -476,68 +473,6 @@ func (g *Game) gridAmount() float64 {
 		return 0
 	}
 	return 1
-}
-
-// drawLinks draws each link as a line hugging the planet's surface, hiding
-// the parts on the far side. Links in networks short of power are orange.
-func (g *Game) drawLinks(screen *ebiten.Image) {
-	p := g.planet
-	s := float32(ebiten.Monitor().DeviceScaleFactor())
-	// Connections stay in the background, thin and faint, except while
-	// placing a building, in the Industry view, or for the network of the
-	// building being inspected.
-	_, placing := g.placing()
-	busy := placing || g.view == viewIndustry
-	var focus *sim.Network
-	if g.inspectOpen() {
-		if b := p.BuildingAt(*g.selected); b != nil {
-			focus = p.NetworkOf(b)
-		}
-	}
-	style := func(tile int) (color.RGBA, float32, bool) {
-		n := p.NetworkOf(p.BuildingAt(p.Grid.CellAt(tile)))
-		c := color.RGBA{90, 220, 255, 255}
-		if n.PowerSatisfaction() < 1 {
-			c = color.RGBA{255, 150, 40, 255}
-		}
-		if busy || n == focus {
-			return c, 2 * s, true
-		}
-		return withAlpha(c, 90), 1.2 * s, false
-	}
-	// Between hubs: always shown, as the network's backbone.
-	for _, l := range p.HubLinks() {
-		c, w, _ := style(l[0])
-		g.drawArc(screen, p.Dir(p.Grid.CellAt(l[0])), p.Dir(p.Grid.CellAt(l[1])), w, c, false)
-	}
-	// From hubs to the buildings they connect: only while they matter.
-	for _, sp := range p.Spokes() {
-		if c, _, strong := style(sp[0]); strong {
-			g.drawArc(screen, p.Dir(p.Grid.CellAt(sp[0])), p.Dir(p.Grid.CellAt(sp[1])), 1.2*s, withAlpha(c, 110), false)
-		}
-	}
-	// What a building being placed would connect through.
-	if bt, ok := g.placing(); ok && g.pending != nil && p.CanBuild(bt, *g.pending) == nil {
-		if via, ok, _, _ := p.Connection(bt, *g.pending); ok {
-			g.drawArc(screen, p.Dir(*g.pending), p.Dir(via), 2*s, color.RGBA{90, 220, 255, 200}, true)
-		}
-	}
-}
-
-// drawArc draws a line along the planet's surface from a to b, dashed if
-// asked.
-func (g *Game) drawArc(screen *ebiten.Image, a, b sim.Vec3, width float32, clr color.Color, dashed bool) {
-	const segments = 12
-	px, py, pvis := g.cam.project(a)
-	for i := 1; i <= segments; i++ {
-		t := float64(i) / segments
-		d := a.Scale(1 - t).Add(b.Scale(t)).Normalize()
-		x, y, vis := g.cam.project(d)
-		if vis && pvis && (!dashed || i%2 == 1) {
-			vector.StrokeLine(screen, float32(px), float32(py), float32(x), float32(y), width, clr, true)
-		}
-		px, py, pvis = x, y, vis
-	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

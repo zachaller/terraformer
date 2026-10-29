@@ -97,9 +97,11 @@ so a chain of pylons carries the colony's network across the planet. Each
 hub has a load capacity (pylons 8, the lander 12), and each building it
 connects takes load by its distance (1 next door, up to 4 at the edge), the
 nearest first: dense or spread-out colonies need more pylons, and a
-building no hub has room for stays unconnected. There are no manual links. A network shares its power (short of
-power, everything in it slows down and its lines turn orange) and moves
-resources between buildings. Networks that include the lander send surplus
+building no hub has room for stays unconnected. There are no manual links,
+and connections aren't drawn: the placement preview says what will connect
+a building, and status badges show what isn't. A network shares its power
+(short of power, everything in it slows down) and moves resources between
+buildings. Networks that include the lander send surplus
 into the colony stores, which pay for construction, and feed machines from
 them. A network doesn't have to reach the colony: a pylon, a dust spreader
 and a solar panel make a working outpost on a polar cap. Pollution from

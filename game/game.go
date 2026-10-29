@@ -117,7 +117,7 @@ func (g *Game) Update() error {
 		return ebiten.Termination
 	}
 	g.ticks++
-	g.cam.layout(g.w, g.h)
+	g.layoutCamera()
 
 	g.handleKeys()
 	gs := g.input.update()
@@ -166,6 +166,13 @@ func (g *Game) handleKeys() {
 	}
 }
 
+// layoutCamera centres the planet in the part of the screen not covered by
+// system bars or cutouts.
+func (g *Game) layoutCamera() {
+	l, t, r, b := currentSafeArea()
+	g.cam.layoutIn(l, t, float64(g.w)-l-r, float64(g.h)-t-b)
+}
+
 func (g *Game) tapPlanet(x, y float64) {
 	g.selectAt(x, y)
 	if g.selected != nil && g.tool == toolHeat {
@@ -183,7 +190,7 @@ func (g *Game) selectAt(x, y float64) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.cam.layout(g.w, g.h)
+	g.layoutCamera()
 	if g.atlasDirty {
 		fillAtlas(g.atlasPix, g.planet, g.view)
 		g.atlas.WritePixels(g.atlasPix)
@@ -260,7 +267,8 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(s, s)
-	op.GeoM.Translate(8*s, 8*s)
+	l, t, _, _ := currentSafeArea()
+	op.GeoM.Translate(l+8*s, t+8*s)
 	screen.DrawImage(g.hud, op)
 }
 

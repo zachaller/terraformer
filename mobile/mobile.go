@@ -14,5 +14,11 @@ func init() {
 	mobile.SetGame(g)
 }
 
+// SetSafeArea tells the game how many pixels along each screen edge are
+// covered by system bars or display cutouts. Called from MainActivity.
+func SetSafeArea(left, top, right, bottom int) {
+	game.SetSafeArea(float64(left), float64(top), float64(right), float64(bottom))
+}
+
 // Dummy is exported because gomobile won't bind a package without exported functions.
 func Dummy() {}

@@ -2,6 +2,7 @@ package game
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -11,10 +12,12 @@ import (
 // Button size and spacing in device-independent pixels; scaled by the
 // device scale factor so they stay finger-sized on phones.
 const (
-	buttonW      = 130
-	buttonH      = 28
+	buttonW      = 130 // widest a button gets; narrower on small screens
+	buttonH      = 44  // close to Android's 48dp minimum touch target
 	buttonGap    = 8
 	buttonMargin = 12
+	labelW       = 130 // size of the 1x image labels are rendered into
+	labelH       = 16
 )
 
 // tool is what tapping the planet does.
@@ -51,12 +54,17 @@ func (b button) contains(x, y float64) bool {
 	return x >= b.x && x < b.x+b.w && y >= b.y && y < b.y+b.h
 }
 
-// buttons lays out the control bar along the bottom of the screen.
+// buttons lays out the control bar along the bottom of the screen, inside
+// the safe area, shrinking the buttons to fit narrow screens.
 func (g *Game) buttons() []button {
 	s := ebiten.Monitor().DeviceScaleFactor()
-	w, h := buttonW*s, buttonH*s
-	y := float64(g.h) - h - buttonMargin*s
-	x := buttonMargin * s
+	l, _, r, b := currentSafeArea()
+	const n = 3
+	avail := float64(g.w) - l - r - 2*buttonMargin*s
+	w := math.Min(buttonW*s, (avail-(n-1)*buttonGap*s)/n)
+	h := buttonH * s
+	y := float64(g.h) - b - h - buttonMargin*s
+	x := l + buttonMargin*s
 	defs := []struct {
 		label  string
 		action func()
@@ -92,17 +100,19 @@ var (
 func (g *Game) drawButtons(screen *ebiten.Image) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	if g.label == nil {
-		g.label = ebiten.NewImage(buttonW, buttonH)
+		g.label = ebiten.NewImage(labelW, labelH)
 	}
 	for _, b := range g.buttons() {
 		vector.FillRect(screen, float32(b.x), float32(b.y), float32(b.w), float32(b.h), buttonFill, false)
 		vector.StrokeRect(screen, float32(b.x), float32(b.y), float32(b.w), float32(b.h), float32(s), buttonBorder, false)
-		// The debug font is fixed-size, so render the label at 1x and scale it.
+		// The debug font is fixed-size, so render the label at 1x and scale
+		// it to the button: s normally, less if the button had to shrink.
 		g.label.Clear()
-		ebitenutil.DebugPrintAt(g.label, b.label, 8, 6)
+		ebitenutil.DebugPrintAt(g.label, b.label, 8, 0)
+		ls := math.Min(s, b.w/labelW)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(s, s)
-		op.GeoM.Translate(b.x, b.y)
+		op.GeoM.Scale(ls, ls)
+		op.GeoM.Translate(b.x, b.y+(b.h-labelH*ls)/2)
 		screen.DrawImage(g.label, op)
 	}
 }

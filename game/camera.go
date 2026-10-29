@@ -38,9 +38,12 @@ func newCamera() camera {
 	return c
 }
 
-func (c *camera) layout(w, h int) {
-	c.cx, c.cy = float64(w)/2, float64(h)/2
-	c.radius = 0.4 * math.Min(float64(w), float64(h)) * c.zoom
+func (c *camera) layout(w, h int) { c.layoutIn(0, 0, float64(w), float64(h)) }
+
+// layoutIn centres the planet in the given screen rectangle.
+func (c *camera) layoutIn(x, y, w, h float64) {
+	c.cx, c.cy = x+w/2, y+h/2
+	c.radius = 0.4 * math.Min(w, h) * c.zoom
 }
 
 // drag rotates the planet so the surface under the pointer follows a drag of

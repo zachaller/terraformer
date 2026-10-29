@@ -281,9 +281,10 @@ func paint(dst vec4, c vec3, m float) vec4 {
 	return vec4(mix(dst.rgb, c, m), max(dst.a, m))
 }
 
-// artScale shrinks the building designs, drawn for a square of side 1, to
-// fit inside a hex tile, which reaches only about 0.5 from its centre.
-const artScale = 1.3
+// artScale shrinks the building designs, drawn for a square of side 1, a
+// little: a hex tile reaches only about 0.5 from its centre (art beyond that
+// spills onto neighbouring tiles, which draw it too).
+const artScale = 1.1
 
 // building returns the colour (rgb) and coverage (a) of building type bt at
 // tile-local position p (each axis in [-0.5, 0.5], y north). act is how hard
@@ -486,9 +487,8 @@ func badge(st float, p vec2, aa float) vec4 {
 	if st < 0.5 || st > 6.5 { // running, or a comet on its way
 		return o
 	}
-	// Inside the hex: tiles are only about half a tile-spacing in radius.
-	c := vec2(0.23, 0.23)
-	r := 0.13
+	c := vec2(0.28, 0.28)
+	r := 0.14
 	q := (p - c) / r
 	qa := aa / r
 	bg := vec3(0.95, 0.65, 0.25) // short of power: amber
@@ -621,33 +621,39 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	strength := clamp((tilePx-6)/12, 0, 1) * 0.35 * Grid * patch
 	base *= 1 - lineAmt*strength
 
-	bdata := atlasAt(dm, ij, 1)
-	bt := floor(bdata.r*255 + 0.5)
-	lp := vec2(0)
-	aa := 0.0
-	if bt > 0 || tile == Ghost {
-		lp = tileLocal(d, dm, ij)
-		aa = max(fwidth(lp.x), fwidth(lp.y)) * 1.2
-	}
-	if bt > 0 {
-		act := bdata.g
-		st := floor(bdata.b*255 + 0.5)
-		b := building(bt, lp*artScale, act, aa*artScale)
-		// Stopped buildings fade to grey; short-of-power ones dim a little.
-		if st > 1.5 {
-			grey := dot(b.rgb, vec3(0.3, 0.59, 0.11))
-			b.rgb = mix(b.rgb, vec3(grey), 0.65) * 0.8
-		} else if st > 0.5 {
-			b.rgb *= 0.85
+	// Buildings: art can spill over its tile's edge, so draw the buildings
+	// on all three tiles around this point (the corners of its lattice
+	// triangle), not just its own. aa is a pixel's size in tile widths.
+	aa := length(fwidth(d)) / TileAngle * 1.2
+	for k := 0; k < 3; k++ {
+		cij := triCorner(l.yz, k)
+		own := cij == ij
+		if tilePx < 10 && !own {
+			continue // too small to see: each tile just shows its own
 		}
-		if tilePx < 10 {
-			// Too small for the design to read: fill the tile instead.
-			b.a = 1
-		}
-		base = mix(base, b.rgb, b.a)
-		if tilePx >= 18 {
-			bg := badge(st, lp, aa)
-			base = mix(base, bg.rgb, bg.a)
+		bdata := atlasAt(dm, cij, 1)
+		bt := floor(bdata.r*255 + 0.5)
+		if bt > 0 {
+			lp := tileLocal(d, dm, cij)
+			act := bdata.g
+			st := floor(bdata.b*255 + 0.5)
+			b := building(bt, lp*artScale, act, aa*artScale)
+			// Stopped buildings fade to grey; short-of-power ones dim a little.
+			if st > 1.5 {
+				grey := dot(b.rgb, vec3(0.3, 0.59, 0.11))
+				b.rgb = mix(b.rgb, vec3(grey), 0.65) * 0.8
+			} else if st > 0.5 {
+				b.rgb *= 0.85
+			}
+			if tilePx < 10 {
+				// Too small for the design to read: fill the tile instead.
+				b.a = 1
+			}
+			base = mix(base, b.rgb, b.a)
+			if tilePx >= 18 {
+				bg := badge(st, lp, aa)
+				base = mix(base, bg.rgb, bg.a)
+			}
 		}
 	}
 
@@ -659,7 +665,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 			}
 		}
 		if tile == Ghost {
-			gb := building(GhostType, lp*artScale, 1, aa*artScale)
+			gb := building(GhostType, tileLocal(d, dm, ij)*artScale, 1, aa*artScale)
 			base = mix(base, gb.rgb, gb.a*0.75)
 			// Outline: amber where it can go, red where it can't.
 			outline := vec3(1, 0.83, 0.42)

@@ -62,6 +62,7 @@ type Game struct {
 
 	atlas      *ebiten.Image
 	atlasPix   []byte
+	atlasSrc   []int32 // tile shown by each atlas colour pixel
 	atlasDirty bool
 
 	hud, label *ebiten.Image
@@ -96,8 +97,9 @@ func New(opts Options) (*Game, error) {
 		opts:       opts,
 		planet:     p,
 		shader:     shader,
-		atlas:      ebiten.NewImage(sim.Faces*n, 2*n),
-		atlasPix:   make([]byte, sim.Faces*n*2*n*4),
+		atlas:      ebiten.NewImage(sim.Faces*(n+2), 2*(n+2)),
+		atlasPix:   make([]byte, sim.Faces*(n+2)*2*(n+2)*4),
+		atlasSrc:   atlasSources(p.Grid),
 		atlasDirty: true,
 		cam:        newCamera(),
 		speed:      1,
@@ -281,7 +283,7 @@ func (g *Game) selectAt(x, y float64) {
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.layoutCamera()
 	if g.atlasDirty {
-		fillAtlas(g.atlasPix, g.planet, g.view)
+		fillAtlas(g.atlasPix, g.atlasSrc, g.planet, g.view)
 		g.atlas.WritePixels(g.atlasPix)
 		g.atlasDirty = false
 	}
@@ -315,6 +317,10 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	if c := g.highlighted(); c != nil {
 		sel = []float32{float32(c.Face), float32(c.I), float32(c.J)}
 	}
+	gridAt := []float32{0, 0, 0}
+	if c := g.highlighted(); c != nil {
+		gridAt = vec3f(g.planet.Grid.DirFromCell(*c))
+	}
 	op := &ebiten.DrawTrianglesShaderOptions{}
 	op.Images[0] = g.atlas
 	op.Uniforms = map[string]any{
@@ -327,6 +333,8 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Selected": sel,
 		"Time":     float32(g.ticks) / float32(ebiten.TPS()),
 		"Light":    vec3f(lightDir),
+		"Grid":     float32(g.gridAmount()),
+		"GridAt":   gridAt,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
 }
@@ -338,6 +346,16 @@ func (g *Game) highlighted() *sim.Cell {
 		return g.linkFrom
 	}
 	return g.selected
+}
+
+// gridAmount is how strongly to draw tile grid lines: only while a tool that
+// places or targets individual tiles is in use, and there's a tapped tile to
+// centre them on.
+func (g *Game) gridAmount() float64 {
+	if g.tool == toolInspect || g.tool == toolLand || g.highlighted() == nil {
+		return 0
+	}
+	return 1
 }
 
 // drawLinks draws each link as a line hugging the planet's surface, hiding

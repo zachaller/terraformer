@@ -58,27 +58,53 @@ var (
 	greyColor  = rgb{70, 70, 75}
 )
 
-// fillAtlas writes the planet into pix, the RGBA pixels of the tile atlas the
-// shader reads. It is 6N×2N: 6 faces side by side, N×N pixels each, one pixel
-// per tile. The top half holds tile colours; the bottom half holds building
-// data (red: building type + 1, or 0 for none; green: activity).
-func fillAtlas(pix []byte, p *sim.Planet, v viewMode) {
-	n := p.Grid.N
-	stride := sim.Faces * n
-	clear(pix[len(pix)/2:])
-	for idx, t := range p.Tiles {
-		c := p.Grid.CellAt(idx)
-		off := (c.J*stride + c.Face*n + c.I) * 4
-		col := tileColor(t, v)
-		pix[off] = uint8(col[0])
-		pix[off+1] = uint8(col[1])
-		pix[off+2] = uint8(col[2])
-		pix[off+3] = 255
-		pix[len(pix)/2+off+3] = 255
+// The tile atlas the shader reads is (6·P)×(2·P) pixels, where P = N+2: one
+// P×P block per cube face, side by side. Each block holds the face's N×N
+// tiles plus a one-tile border copied from the neighbouring faces, so the
+// shader can blend colours smoothly across face seams. The top half holds
+// tile colours; the bottom half holds building data (red: building type + 1,
+// or 0 for none; green: activity).
+
+// atlasSources maps each pixel in the top half of the atlas to the tile whose
+// colour it shows.
+func atlasSources(g sim.Grid) []int32 {
+	n := g.N
+	p := n + 2
+	src := make([]int32, sim.Faces*p*p)
+	for f := range sim.Faces {
+		for j := -1; j <= n; j++ {
+			for i := -1; i <= n; i++ {
+				src[(j+1)*sim.Faces*p+f*p+i+1] = int32(g.Index(g.Wrap(f, i, j)))
+			}
+		}
 	}
+	return src
+}
+
+// fillAtlas writes the planet into pix, the atlas's RGBA pixels, using src
+// from atlasSources.
+func fillAtlas(pix []byte, src []int32, p *sim.Planet, v viewMode) {
+	half := len(pix) / 2
+	colors := make([]rgb, len(p.Tiles))
+	for idx, t := range p.Tiles {
+		colors[idx] = tileColor(t, v)
+	}
+	for k, idx := range src {
+		col := colors[idx]
+		pix[k*4] = uint8(col[0])
+		pix[k*4+1] = uint8(col[1])
+		pix[k*4+2] = uint8(col[2])
+		pix[k*4+3] = 255
+	}
+	clear(pix[half:])
+	for k := 3; k < half; k += 4 {
+		pix[half+k] = 255
+	}
+	n := p.Grid.N
+	stride := sim.Faces * (n + 2)
 	for _, b := range p.Buildings() {
 		c := p.Grid.CellAt(b.Tile)
-		off := len(pix)/2 + (c.J*stride+c.Face*n+c.I)*4
+		off := half + ((c.J+1)*stride+c.Face*(n+2)+c.I+1)*4
 		pix[off] = uint8(b.Type) + 1
 		pix[off+1] = uint8(b.Activity * 255)
 	}

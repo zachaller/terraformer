@@ -3,9 +3,14 @@
 package main
 
 // Draws the starfield and the planet as a ray-traced sphere on one screen quad.
-// Source image 0 is the tile atlas, 6N×2N: 6 faces side by side, N×N pixels
-// each, one pixel per tile. The top half is tile colour; the bottom half is
+// Source image 0 is the tile atlas, (6·P)×(2·P) with P = N+2: one P×P block
+// per cube face, holding its N×N tiles plus a one-tile border copied from
+// neighbouring faces. The top half is tile colour; the bottom half is
 // building data (red: type + 1, or 0 for none; green: activity 0..1).
+//
+// Tile colours are blended smoothly and broken up with noise so the planet
+// looks natural rather than like a cube of squares; buildings, selection and
+// grid lines still follow the tiles.
 
 var Center vec2   // planet centre on screen, pixels
 var Radius float  // planet radius on screen, pixels
@@ -16,6 +21,8 @@ var N float       // cells per face edge
 var Selected vec3 // selected cell (face, i, j); face < 0 means none
 var Time float    // seconds
 var Light vec3    // unit light direction, view space
+var Grid float    // tile grid line strength, 0 to hide
+var GridAt vec3   // planet-space centre of the patch where grid lines show
 
 // faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1], on
 // the equal-angle grid.
@@ -127,6 +134,36 @@ func building(bt float, p vec2) vec4 {
 	return vec4(0)
 }
 
+func hash3(p vec3) float {
+	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453)
+}
+
+// vnoise is 3D value noise in [0, 1]. Evaluated in planet space, so it's
+// continuous across cube seams.
+func vnoise(p vec3) float {
+	i := floor(p)
+	t := fract(p)
+	u := t * t * (3 - 2*t)
+	a := mix(hash3(i), hash3(i+vec3(1, 0, 0)), u.x)
+	b := mix(hash3(i+vec3(0, 1, 0)), hash3(i+vec3(1, 1, 0)), u.x)
+	c := mix(hash3(i+vec3(0, 0, 1)), hash3(i+vec3(1, 0, 1)), u.x)
+	e := mix(hash3(i+vec3(0, 1, 1)), hash3(i+vec3(1, 1, 1)), u.x)
+	return mix(mix(a, b, u.y), mix(c, e, u.y), u.z)
+}
+
+// smoothColor blends the colours of the four tiles nearest planet direction
+// d. The atlas border supplies tiles from neighbouring faces at seams.
+func smoothColor(d vec3) vec3 {
+	f := faceUV(d)
+	p := (f.yz+1)/2*N - 0.5 // in tile-centre coordinates
+	i0 := floor(p)
+	fr := smoothstep(vec2(0.1), vec2(0.9), p-i0)
+	at := imageSrc0Origin() + vec2(f.x*(N+2)+1.5, 1.5) + i0
+	c0 := mix(imageSrc0UnsafeAt(at).rgb, imageSrc0UnsafeAt(at+vec2(1, 0)).rgb, fr.x)
+	c1 := mix(imageSrc0UnsafeAt(at+vec2(0, 1)).rgb, imageSrc0UnsafeAt(at+vec2(1, 1)).rgb, fr.x)
+	return mix(c0, c1, fr.y)
+}
+
 func hash(p vec2) float {
 	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
 }
@@ -157,18 +194,28 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	f := faceUV(d)
 	st := (f.yz + 1) / 2 * N
 	ij := clamp(floor(st), vec2(0), vec2(N-1))
-	texel := imageSrc0Origin() + vec2(f.x*N+ij.x+0.5, ij.y+0.5)
-	base := imageSrc0UnsafeAt(texel).rgb
 
-	// Tile grid lines, faded out when tiles are small on screen.
+	// Warp the colour lookup with noise so region edges wander organically
+	// instead of following the grid, then add fine surface texture.
+	tileAngle := 1.5708 / N
+	q3 := d * N * 0.9
+	warp := vec3(vnoise(q3), vnoise(q3+vec3(17.3, 5.1, 9.7)), vnoise(q3+vec3(41.7, 23.9, 3.3))) - 0.5
+	base := smoothColor(normalize(d + warp*tileAngle*1.4))
+	detail := vnoise(d*N*2.5)*0.7 + vnoise(d*N*6)*0.3
+	base *= 0.92 + 0.16*detail
+
+	// Tile grid lines, only while placing things and only in a small patch
+	// around the last tapped tile (so the cube layout never shows), faded
+	// out when tiles are small on screen.
 	g := fract(st)
 	w := max(fwidth(st), vec2(1e-4))
 	edge := min(min(g.x, 1-g.x)/w.x, min(g.y, 1-g.y)/w.y)
 	lineAmt := 1 - clamp(edge, 0, 1)
-	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.3
+	patch := 1 - smoothstep(2*tileAngle, 4*tileAngle, length(d-GridAt))
+	strength := clamp((2*Radius/N-6)/12, 0, 1) * 0.35 * Grid * patch
 	base *= 1 - lineAmt*strength
 
-	bdata := imageSrc0UnsafeAt(texel + vec2(0, N))
+	bdata := imageSrc0UnsafeAt(imageSrc0Origin() + vec2(f.x*(N+2)+ij.x+1.5, N+2+ij.y+1.5))
 	bt := floor(bdata.r*255 + 0.5)
 	if bt > 0 {
 		b := building(bt, tileLocal(d, f.x, ij))

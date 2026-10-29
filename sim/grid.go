@@ -76,23 +76,27 @@ func (g Grid) DirFromCell(c Cell) Vec3 {
 }
 
 // Neighbors returns the four cells sharing an edge with c, in the order
-// +I, -I, +J, -J. Across a face seam, the neighbour is found by stepping one
-// cell past the edge on c's face plane and projecting that point back onto
-// the cube, which lands in the adjoining cell of the next face.
+// +I, -I, +J, -J.
 func (g Grid) Neighbors(c Cell) [4]Cell {
 	steps := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 	var out [4]Cell
 	for k, s := range steps {
-		i, j := c.I+s[0], c.J+s[1]
-		if i >= 0 && i < g.N && j >= 0 && j < g.N {
-			out[k] = Cell{Face: c.Face, I: i, J: j}
-			continue
-		}
-		u := (float64(i)+0.5)/float64(g.N)*2 - 1
-		v := (float64(j)+0.5)/float64(g.N)*2 - 1
-		out[k] = g.CellFromDir(dirFromFaceUV(c.Face, u, v))
+		out[k] = g.Wrap(c.Face, c.I+s[0], c.J+s[1])
 	}
 	return out
+}
+
+// Wrap returns the cell at column i, row j of face, where i and j may run up
+// to a cell past the face's edges. Off the edge, it steps past the edge on
+// the face's plane and projects that point back onto the cube, which lands
+// in the adjoining cell of the next face.
+func (g Grid) Wrap(face, i, j int) Cell {
+	if i >= 0 && i < g.N && j >= 0 && j < g.N {
+		return Cell{Face: face, I: i, J: j}
+	}
+	u := (float64(i)+0.5)/float64(g.N)*2 - 1
+	v := (float64(j)+0.5)/float64(g.N)*2 - 1
+	return g.CellFromDir(dirFromFaceUV(face, u, v))
 }
 
 func (g Grid) coord(t float64) int {

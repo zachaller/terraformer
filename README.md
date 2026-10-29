@@ -12,7 +12,10 @@ shape a barren planet until life takes hold. See
 
 - A procedurally generated cube-sphere planet (6 × 32 × 32 tiles by default),
   rendered as a 2D "shader globe": one screen quad and a Kage shader that
-  ray-traces the sphere and looks each pixel up in a tile atlas.
+  ray-traces the sphere and looks each pixel up in a tile atlas. Tile colours
+  are blended smoothly and broken up with noise, so the planet looks natural
+  rather than like a cube of squares; a tile grid appears only around the
+  tapped tile while a build, link or demolish tool is active.
 - A running climate simulation: temperature by latitude, greenhouse effect,
   heat spreading between tiles, ice melting and freezing, water flowing
   downhill, and microbes appearing and spreading where it's warm, wet and

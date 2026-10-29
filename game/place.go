@@ -42,37 +42,71 @@ func (g *Game) confirmPlacement() {
 	})
 }
 
-// maxAreaCells is the most tiles a placement preview tints: two rings of
-// hexes. The shader has an array of this size.
-const maxAreaCells = 18
+// maxAreaCells is the most tiles a placement preview tints: three rings of
+// hexes. The shader has arrays of this size.
+const maxAreaCells = 36
 
-// placementArea is how many neighbour-steps out a building's effect reaches,
-// and the colour to tint that area.
-func placementArea(bt sim.BuildingType) (int, color.RGBA) {
+// heatShownMin is the least warming, in °C, a heater preview tints a ring
+// for.
+const heatShownMin = 1.5
+
+// areaTint is one tile a placement preview tints, and how strongly.
+type areaTint struct {
+	cell   sim.Cell
+	amount float64 // 0 to 1
+}
+
+// placementArea lists the tiles building bt on c would affect, each with how
+// strongly to tint it, and the tint's colour. A heater's area fades out
+// with the warming each ring gets (see sim.Grid.HeatRings); mines and
+// smelters pollute evenly out to their reach.
+func (g *Game) placementArea(bt sim.BuildingType, c sim.Cell) ([]areaTint, color.RGBA) {
+	const full = 0.38
+	var out []areaTint
 	switch bt {
 	case sim.HeaterMachine:
-		return 1, colAmber // its tile's neighbours
-	case sim.Mine:
-		return 1, rgba(0xB07CA0)
-	case sim.Smelter:
-		return 2, rgba(0xB07CA0)
+		rings := g.heatRings
+		n := 0
+		for n+1 < len(rings) && rings[n+1] >= heatShownMin {
+			n++
+		}
+		for _, a := range areaCells(g.planet.Grid, c, n) {
+			// Fade with the warming, but keep faint rings visible.
+			out = append(out, areaTint{a.cell, math.Max(full*rings[a.ring]/rings[1], 0.12)})
+		}
+		return out, colAmber
+	case sim.Mine, sim.Smelter:
+		steps := 1
+		if bt == sim.Smelter {
+			steps = 2
+		}
+		for _, a := range areaCells(g.planet.Grid, c, steps) {
+			out = append(out, areaTint{a.cell, full})
+		}
+		return out, rgba(0xB07CA0)
 	}
-	return 0, colAmber
+	return nil, colAmber
+}
+
+// ringCell is a tile and how many neighbour-steps it is from somewhere.
+type ringCell struct {
+	cell sim.Cell
+	ring int
 }
 
 // areaCells lists the tiles within steps neighbour-steps of c (not c itself),
-// following the same neighbours as the simulation.
-func areaCells(grid sim.Grid, c sim.Cell, steps int) []sim.Cell {
+// nearest first, following the same neighbours as the simulation.
+func areaCells(grid sim.Grid, c sim.Cell, steps int) []ringCell {
 	seen := map[sim.Cell]bool{c: true}
 	frontier := []sim.Cell{c}
-	var out []sim.Cell
-	for range steps {
+	var out []ringCell
+	for r := 1; r <= steps; r++ {
 		var next []sim.Cell
 		for _, f := range frontier {
 			for _, nb := range grid.Neighbors(f) {
 				if !seen[nb] && len(out) < maxAreaCells {
 					seen[nb] = true
-					out = append(out, nb)
+					out = append(out, ringCell{nb, r})
 					next = append(next, nb)
 				}
 			}
@@ -126,10 +160,11 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 	rows = append(rows, previewRow{iconThermo, colBlue, "This tile", t.Kind().String() + " · " + degrees(t.Temp), colIcon})
 	switch bt {
 	case sim.HeaterMachine:
-		rows = append(rows, previewRow{iconThermo, colAmber, "Warms", fmt.Sprintf("+%.0f° here, +%.0f° around", spec.Heat, spec.Heat/2), rgba(0xFFD36B)})
+		rings := g.heatRings
+		rows = append(rows, previewRow{iconThermo, colAmber, "Warms", fmt.Sprintf("+%.0f° here · then +%.0f°, +%.0f°, +%.0f°", rings[0], rings[1], rings[2], rings[3]), rgba(0xFFD36B)})
 		if t.Ice > 0 {
 			fate, col := "stays frozen", color.Color(colMuted)
-			if t.Temp+spec.Heat*0.8 > 0 {
+			if t.Temp+rings[0] > 0 {
 				fate, col = "will melt", colBlue
 			}
 			rows = append(rows, previewRow{iconDrop, colBlue, "Ice here", fmt.Sprintf("%.2f · %s", t.Ice, fate), col})

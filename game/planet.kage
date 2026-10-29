@@ -28,11 +28,13 @@ var GridAt vec3      // planet-space centre of the patch where grid lines show
 
 // A building being placed: its tile index (-1 means none), type + 1,
 // whether the spot is valid, and the tiles it would heat or pollute (unused
-// entries are -1), tinted AreaTint. Area's size matches game.maxAreaCells.
+// entries are -1), tinted AreaTint by AreaAmt. The arrays' size matches
+// game.maxAreaCells.
 var Ghost float
 var GhostType float
 var GhostOK float
-var Area [18]float
+var Area [36]float
+var AreaAmt [36]float
 var AreaTint vec3
 
 // latticeWarpC and the two warp functions mirror sim's latticeWarp.
@@ -523,9 +525,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	if Ghost >= 0 {
 		// Tint the tiles the new building would heat or pollute.
-		for i := 0; i < 18; i++ {
+		for i := 0; i < 36; i++ {
 			if Area[i] == tile {
-				base = mix(base, AreaTint, 0.38)
+				base = mix(base, AreaTint, AreaAmt[i])
 			}
 		}
 		if tile == Ghost {

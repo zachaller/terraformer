@@ -189,3 +189,15 @@ func TestHeatedBasinGrowsLife(t *testing.T) {
 		t.Fatal("no life appeared after heating an equatorial basin")
 	}
 }
+
+func TestHeatRings(t *testing.T) {
+	// The estimate is close to what a heater actually does on the planet:
+	// about +30, +19, +6 and +2 °C for heat 70 (measured with AddHeat
+	// over 2000 steps).
+	got := (Grid{N: 25}).HeatRings(70, 3)
+	for r, want := range []float64{30, 19, 6, 2} {
+		if math.Abs(got[r]-want) > 0.2*want+0.5 {
+			t.Errorf("ring %d: %.1f °C, want about %.0f", r, got[r], want)
+		}
+	}
+}

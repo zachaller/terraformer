@@ -183,6 +183,63 @@ func (p *Planet) chance(idx, salt int) float64 {
 	return (hash3(p.Seed^uint64(salt)*0x9E3779B97F4A7C15, int64(p.Ticks), int64(idx), 0x11fe) + 1) / 2
 }
 
+// HeatRings estimates how much warmer a heater putting out heat keeps its
+// own tile (ring 0) and each ring of tiles around it, out to rings, once
+// temperatures have settled. Each tile settles where stepTemperature's pull
+// towards its target (raised by heat on the heater's tile and by half that
+// on its neighbours) balances the pull towards its neighbours' average.
+// Feedbacks such as melting ice aren't included.
+func (g Grid) HeatRings(heat float64, rings int) []float64 {
+	// A tile well away from the pentagons, and the patch of tiles around
+	// it, far enough out that the warming there is negligible.
+	c := g.Index(g.LatticeCell(0, g.N/2, g.N/2))
+	ring := map[int]int{c: 0}
+	frontier := []int{c}
+	for r := 1; r <= rings+8; r++ {
+		var next []int
+		for _, f := range frontier {
+			for _, nb := range g.NeighborIndices(f) {
+				if _, ok := ring[int(nb)]; !ok {
+					ring[int(nb)] = r
+					next = append(next, int(nb))
+				}
+			}
+		}
+		frontier = next
+	}
+	x, nx := map[int]float64{}, map[int]float64{}
+	for range 400 {
+		for idx, r := range ring {
+			h := 0.0
+			switch r {
+			case 0:
+				h = heat
+			case 1:
+				h = heat / 2
+			}
+			nbs := g.NeighborIndices(idx)
+			avg := 0.0
+			for _, nb := range nbs {
+				avg += x[int(nb)]
+			}
+			avg /= float64(len(nbs))
+			nx[idx] = (tempRelax*h + tempDiffusion*avg) / (tempRelax + tempDiffusion)
+		}
+		x, nx = nx, x
+	}
+	sum, count := make([]float64, rings+1), make([]float64, rings+1)
+	for idx, r := range ring {
+		if r <= rings {
+			sum[r] += x[idx]
+			count[r]++
+		}
+	}
+	for r := range sum {
+		sum[r] /= count[r]
+	}
+	return sum
+}
+
 // AddHeat warms the tile at c and, by half as much, its neighbours, as a
 // heater would. Heat is capped at maxHeat per tile.
 func (p *Planet) AddHeat(c Cell, amount float64) {

@@ -99,7 +99,7 @@ func TestAreaCellsFollowNeighbours(t *testing.T) {
 		t.Fatalf("one step from %v: %d cells, want 6", c, len(one))
 	}
 	for i, nb := range g.Neighbors(c) {
-		if one[i] != nb {
+		if one[i] != (ringCell{nb, 1}) {
 			t.Fatalf("one step from %v = %v, want its neighbours %v", c, one, g.Neighbors(c))
 		}
 	}

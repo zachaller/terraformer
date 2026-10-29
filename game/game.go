@@ -68,9 +68,12 @@ type Game struct {
 	planet *sim.Planet
 	shader *ebiten.Shader
 
-	atlas      *ebiten.Image
-	atlasPix   []byte
-	atlasSrc   []int32 // tile shown by each atlas colour pixel
+	atlas    *ebiten.Image
+	atlasPix []byte
+	atlasSrc []int32 // tile shown by each atlas colour pixel
+	// heatRings is how much a heater warms its tile and each ring around
+	// it, for placement previews.
+	heatRings  []float64
 	atlasDirty bool
 
 	cam      camera
@@ -152,6 +155,7 @@ func New(opts Options) (*Game, error) {
 // setPlanet switches the game to planet p, resetting selection and tools.
 func (g *Game) setPlanet(p *sim.Planet) {
 	g.planet = p
+	g.heatRings = p.Grid.HeatRings(sim.Specs[sim.HeaterMachine].Heat, 3)
 	if w, h := atlasSize(p.Grid); g.atlas == nil || g.atlas.Bounds().Dx() != w {
 		g.atlas = ebiten.NewImage(w, h)
 		g.atlasPix = make([]byte, w*h*4)
@@ -468,7 +472,7 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		sel = float32(grid.Index(*c))
 	}
 	ghost, ghostType, ghostOK, tint := float32(-1), float32(0), float32(1), []float32{0, 0, 0}
-	area := make([]float32, maxAreaCells)
+	area, areaAmt := make([]float32, maxAreaCells), make([]float32, maxAreaCells)
 	for i := range area {
 		area[i] = -1
 	}
@@ -479,9 +483,9 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		if g.planet.CanBuild(bt, c) != nil {
 			ghostOK = 0
 		}
-		steps, col := placementArea(bt)
-		for i, a := range areaCells(grid, c, steps) {
-			area[i] = float32(grid.Index(a))
+		tints, col := g.placementArea(bt, c)
+		for i, a := range tints {
+			area[i], areaAmt[i] = float32(grid.Index(a.cell)), float32(a.amount)
 		}
 		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
 	}
@@ -508,6 +512,7 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"GhostType": ghostType,
 		"GhostOK":   ghostOK,
 		"Area":      area,
+		"AreaAmt":   areaAmt,
 		"AreaTint":  tint,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)

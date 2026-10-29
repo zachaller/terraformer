@@ -83,6 +83,12 @@ type Game struct {
 	message  string
 	msgKind  msgKind
 	msgUntil int // tick the message disappears
+	// msgAction, if set, is a button on the message, labelled msgActionLabel.
+	msgAction      func()
+	msgActionLabel string
+
+	pending  *sim.Cell // where the building being placed would go
+	linkDrag *linkDrag // a link being dragged out
 
 	goalCollapsed bool
 	metalHist     []float64 // metal produced so far, sampled each day
@@ -180,6 +186,30 @@ func (g *Game) Update() error {
 	g.handleKeys()
 	gs := g.input.update()
 	g.cam.zoomBy(gs.zoom)
+	if gs.pinching {
+		g.linkDrag = nil
+	}
+	if gs.press && g.tool == toolLink && g.linkDrag == nil && !g.uiHitAt(gs.pressX, gs.pressY) {
+		if c, ok := g.cam.pick(g.planet.Grid, gs.pressX, gs.pressY); ok && g.planet.BuildingAt(c) != nil {
+			g.linkDrag = &linkDrag{from: c, x: gs.pressX, y: gs.pressY}
+		}
+	}
+	if g.linkDrag != nil {
+		// Dragging out a link: the finger draws the link instead of
+		// turning the planet.
+		g.linkDrag.x, g.linkDrag.y = gs.curX, gs.curY
+		switch {
+		case gs.tap:
+			// A tap rather than a drag: link by tapping instead.
+			g.linkDrag = nil
+			g.tapPlanet(gs.tapX, gs.tapY)
+		case gs.release:
+			g.linkDrag.x, g.linkDrag.y = gs.releaseX, gs.releaseY
+			g.finishLinkDrag()
+		}
+		gs.tap, gs.dragging, gs.dragX, gs.dragY = false, false, 0, 0
+		g.cam.stop()
+	}
 	switch {
 	case gs.dragging && (gs.dragX != 0 || gs.dragY != 0):
 		g.focus = nil
@@ -189,7 +219,7 @@ func (g *Game) Update() error {
 	default:
 		g.cam.coast()
 	}
-	if gs.tap {
+	if gs.tap && g.linkDrag == nil {
 		u := g.newUI(nil)
 		u.tapping, u.tapX, u.tapY = true, gs.tapX/u.s, gs.tapY/u.s
 		g.runUI(u)
@@ -272,10 +302,13 @@ func (g *Game) handleKeys() {
 		g.setTool(toolDemolish)
 	case inpututil.IsKeyJustPressed(ebiten.KeyG):
 		g.goalCollapsed = !g.goalCollapsed
+	case inpututil.IsKeyJustPressed(ebiten.KeyEnter):
+		g.confirmPlacement()
 	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
 		g.menuOpen = false
 		g.linkFrom = nil
 		g.selected = nil
+		g.pending = nil
 	case inpututil.IsKeyJustPressed(ebiten.KeyV):
 		g.view = (g.view + 1) % numViews
 		g.atlasDirty = true
@@ -321,6 +354,23 @@ func (g *Game) showMessage(m string, kind msgKind) {
 	g.message = m
 	g.msgKind = kind
 	g.msgUntil = g.ticks + messageTime*ebiten.TPS()
+	g.msgAction, g.msgActionLabel = nil, ""
+}
+
+// showMessageAction shows a message with a button on it, for a little longer.
+func (g *Game) showMessageAction(m string, kind msgKind, label string, action func()) {
+	g.showMessage(m, kind)
+	g.msgAction, g.msgActionLabel = action, label
+	g.msgUntil = g.ticks + 2*messageTime*ebiten.TPS()
+}
+
+// uiHitAt reports whether screen point (x, y) is on the UI rather than the
+// planet.
+func (g *Game) uiHitAt(x, y float64) bool {
+	u := g.newUI(nil)
+	u.tapping, u.tapX, u.tapY = true, x/u.s, y/u.s
+	g.runUI(u)
+	return u.hit
 }
 
 // tapPlanet selects the tapped tile and applies the current tool to it.
@@ -338,12 +388,8 @@ func (g *Game) tapPlanet(x, y float64) {
 	if g.tool == toolInspect {
 		g.focus = &c
 	}
-	if bt, ok := g.tool.building(); ok {
-		if _, err := p.Build(bt, c); err != nil {
-			g.showMessage(err.Error(), msgWarn)
-		} else {
-			g.showMessage(fmt.Sprintf("Built a %v. Now Link it to your network", bt), msgInfo)
-		}
+	if _, ok := g.placing(); ok {
+		g.pending = &c
 		return
 	}
 	switch g.tool {
@@ -409,6 +455,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	g.drawPlanet(screen)
 	g.drawLinks(screen)
+	g.drawLinkPreview(screen)
 	g.runUI(g.newUI(screen))
 
 	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {
@@ -433,8 +480,21 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	}
 
 	sel := []float32{-1, 0, 0}
-	if c := g.highlighted(); c != nil {
+	if c := g.highlighted(); c != nil && g.pending == nil {
 		sel = []float32{float32(c.Face), float32(c.I), float32(c.J)}
+	}
+	ghost, ghostDir, ghostType, ghostOK, area, tint := []float32{-1, 0, 0}, []float32{0, 0, 0}, float32(0), float32(1), float32(0), []float32{0, 0, 0}
+	if bt, ok := g.placing(); ok && g.pending != nil {
+		c := *g.pending
+		ghost = []float32{float32(c.Face), float32(c.I), float32(c.J)}
+		ghostDir = vec3f(g.planet.Grid.DirFromCell(c))
+		ghostType = float32(bt) + 1
+		if g.planet.CanBuild(bt, c) != nil {
+			ghostOK = 0
+		}
+		r, col := placementArea(bt)
+		area = float32(r)
+		tint = []float32{float32(col.R) / 255, float32(col.G) / 255, float32(col.B) / 255}
 	}
 	gridAt := []float32{0, 0, 0}
 	if c := g.highlighted(); c != nil {
@@ -443,17 +503,23 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 	op := &ebiten.DrawTrianglesShaderOptions{}
 	op.Images[0] = g.atlas
 	op.Uniforms = map[string]any{
-		"Center":   []float32{float32(g.cam.cx), float32(g.cam.cy)},
-		"Radius":   float32(g.cam.radius),
-		"Row0":     vec3f(g.cam.rot[0]),
-		"Row1":     vec3f(g.cam.rot[1]),
-		"Row2":     vec3f(g.cam.rot[2]),
-		"N":        float32(g.planet.Grid.N),
-		"Selected": sel,
-		"Time":     float32(g.ticks) / float32(ebiten.TPS()),
-		"Light":    vec3f(lightDir),
-		"Grid":     float32(g.gridAmount()),
-		"GridAt":   gridAt,
+		"Center":    []float32{float32(g.cam.cx), float32(g.cam.cy)},
+		"Radius":    float32(g.cam.radius),
+		"Row0":      vec3f(g.cam.rot[0]),
+		"Row1":      vec3f(g.cam.rot[1]),
+		"Row2":      vec3f(g.cam.rot[2]),
+		"N":         float32(g.planet.Grid.N),
+		"Selected":  sel,
+		"Time":      float32(g.ticks) / float32(ebiten.TPS()),
+		"Light":     vec3f(lightDir),
+		"Grid":      float32(g.gridAmount()),
+		"GridAt":    gridAt,
+		"Ghost":     ghost,
+		"GhostDir":  ghostDir,
+		"GhostType": ghostType,
+		"GhostOK":   ghostOK,
+		"GhostArea": area,
+		"AreaTint":  tint,
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
 }
@@ -461,6 +527,9 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 // highlighted is the tile to highlight: the start of a link being made, or
 // else the selected tile.
 func (g *Game) highlighted() *sim.Cell {
+	if g.linkDrag != nil {
+		return &g.linkDrag.from
+	}
 	if g.tool == toolLink && g.linkFrom != nil {
 		return g.linkFrom
 	}

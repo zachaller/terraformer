@@ -109,15 +109,24 @@ func (c *camera) rotate(yaw, pitch float64) {
 
 // pick returns the cell under screen point (x, y), if the point is on the planet.
 func (c *camera) pick(g sim.Grid, x, y float64) (sim.Cell, bool) {
+	d, ok := c.pickDir(x, y)
+	if !ok {
+		return sim.Cell{}, false
+	}
+	return g.CellFromDir(d), true
+}
+
+// pickDir returns the planet direction under screen point (x, y), if the
+// point is on the planet.
+func (c *camera) pickDir(x, y float64) (sim.Vec3, bool) {
 	qx := (x - c.cx) / c.radius
 	qy := -(y - c.cy) / c.radius
 	r2 := qx*qx + qy*qy
 	if r2 > 1 {
-		return sim.Cell{}, false
+		return sim.Vec3{}, false
 	}
 	qz := math.Sqrt(1 - r2)
-	d := c.rot[0].Scale(qx).Add(c.rot[1].Scale(qy)).Add(c.rot[2].Scale(qz))
-	return g.CellFromDir(d), true
+	return c.rot[0].Scale(qx).Add(c.rot[1].Scale(qy)).Add(c.rot[2].Scale(qz)), true
 }
 
 // project is the inverse of pick: where planet direction d appears on screen,

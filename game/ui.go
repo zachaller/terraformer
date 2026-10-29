@@ -79,6 +79,8 @@ func (g *Game) setTool(t tool) {
 	g.tool = t
 	g.menuOpen = false
 	g.linkFrom = nil
+	g.pending = nil
+	g.linkDrag = nil
 }
 
 // Layout sizes in dp.
@@ -112,7 +114,12 @@ func (g *Game) runUI(u *ui) {
 	// On wide screens, keep cards and the dock to a phone-like width.
 	narrow := math.Min(right, left+480)
 	y := g.statusBar(u, left, right, top)
-	y = g.goalCard(u, left, narrow, y+gap)
+	_, placing := g.placing()
+	if (placing || g.tool == toolLink) && !g.menuOpen {
+		y = g.modeBanner(u, left, narrow, y+gap)
+	} else {
+		y = g.goalCard(u, left, narrow, y+gap)
+	}
 	planetTop := y + gap
 	planetBottom := bottom
 
@@ -126,6 +133,9 @@ func (g *Game) runUI(u *ui) {
 		g.toast(u, left, narrow, planetBottom)
 	case g.inspectOpen():
 		planetBottom = g.inspectSheet(u, sl, math.Min(W-sr, sl+520), H) - gap
+	case placing && g.pending != nil:
+		planetBottom = g.placementPanel(u, left, narrow, bottom) - gap
+		g.toast(u, left, narrow, planetBottom)
 	default:
 		dockTop := bottom - dockH
 		g.dock(u, left, narrow, dockTop)
@@ -141,6 +151,7 @@ func (g *Game) runUI(u *ui) {
 		planetBottom = speedTop - gap
 		g.viewRail(u, right, planetTop, planetBottom)
 	}
+	g.linkBubble(u, left, right)
 	if !u.measuring {
 		g.planetTarget = [4]float64{sl * s, planetTop * s, (W - sl - sr) * s, math.Max(planetBottom-planetTop, 80) * s}
 	}
@@ -395,14 +406,32 @@ func (g *Game) toast(u *ui, left, right, bottom float64) {
 	}
 	w := right - left
 	f := u.face(sans, 13, regular)
-	lines := wrapWidth(g.message, f, (w-46)*u.s)
+	btnW := 0.0
+	if g.msgAction != nil {
+		btnW = u.textW(g.msgActionLabel, sans, 12, bold) + 24
+	}
+	lines := wrapWidth(g.message, f, (w-46-btnW)*u.s)
 	if len(lines) > 3 {
 		lines = lines[:3]
 	}
 	lh := 13 * 1.45
 	h := float64(len(lines))*lh + 20
+	if btnW > 0 {
+		h = math.Max(h, 56)
+	}
 	y := bottom - h
 	u.panel(left, y, w, h, 14, fill, border)
+	if btnW > 0 {
+		bx, bh := left+w-btnW-8, 40.0
+		by := y + (h-bh)/2
+		u.fillRound(bx, by, btnW, bh, 12, colTeal)
+		u.text(g.msgActionLabel, bx+12, by+(bh-u.lineH(sans, 12, bold))/2, sans, 12, bold, rgba(0x06231E))
+		action := g.msgAction
+		u.area(bx, by, btnW, bh, func() {
+			g.msgUntil = 0
+			action()
+		})
+	}
 	u.icon(ic, left+12, y+10, 18, fg)
 	for i, line := range lines {
 		u.text(line, left+38, y+10+float64(i)*lh, sans, 13, regular, fg)

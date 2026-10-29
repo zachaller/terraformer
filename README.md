@@ -66,13 +66,14 @@ live there and what's stopping them, and the building's network.
 | Zoom | Pinch | Mouse wheel |
 | Use the current tool on a tile | Tap | Click |
 | Build menu (Solar, Mine, Smelter, Heater, new planet) | **Build** | `B`, or `1`–`4` to pick a building |
-| Link buildings: tap one, then another (chains continue) | **Link** | `L` |
+| Place a building: tap a tile to preview it (heat or pollution area, effects, warnings), tap another to move it, then **Build here** | Tap, then **Build here** | Click, then `Enter` |
+| Link buildings: drag from one to another (shows reach and cost); or tap one, then the other | **Link**, then drag | `L`, then drag |
 | Inspect a tile or building | **Inspect** | `I` |
 | Remove a building (half its metal back) | **Remove** | `X` |
 | Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |
 | Speed (Paused / 1× / 4×) | Speed pill | `Space` pause, `F` fast |
 | Collapse the goal card | Tap it | `G` |
-| Close panels, cancel a link | Close button | `Esc` |
+| Close panels, cancel a link or placement | Close button | `Esc` |
 
 ## Running on desktop
 

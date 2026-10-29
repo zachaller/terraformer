@@ -24,6 +24,16 @@ var Light vec3    // unit light direction, view space
 var Grid float    // tile grid line strength, 0 to hide
 var GridAt vec3   // planet-space centre of the patch where grid lines show
 
+// A building being placed: its cell (face < 0 means none), type + 1, the
+// planet-space direction of its tile centre, whether the spot is valid, and
+// the radius in tiles of the area it affects, tinted AreaTint.
+var Ghost vec3
+var GhostType float
+var GhostDir vec3
+var GhostOK float
+var GhostArea float
+var AreaTint vec3
+
 // faceUV mirrors sim.faceUV: returns (face, u, v) with u, v in [-1, 1], on
 // the equal-angle grid.
 func faceUV(d vec3) vec3 {
@@ -229,6 +239,29 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 			b.a = 1
 		}
 		base = mix(base, b.rgb, b.a)
+	}
+
+	if Ghost.x >= 0 {
+		// Tint the tiles the new building would heat or pollute.
+		uv := (ij+0.5)/N*2 - 1
+		centre := normalize(dirFromFaceUV(f.x, uv.x, uv.y))
+		dist := length(centre-GhostDir) / tileAngle
+		if dist > 0.5 && dist < GhostArea {
+			base = mix(base, AreaTint, 0.38)
+		}
+		if f.x == Ghost.x && ij.x == Ghost.y && ij.y == Ghost.z {
+			gb := building(GhostType, tileLocal(d, f.x, ij))
+			base = mix(base, gb.rgb, gb.a*0.75)
+			// Outline: amber where it can go, red where it can't.
+			outline := vec3(1, 0.83, 0.42)
+			if GhostOK < 0.5 {
+				outline = vec3(1, 0.42, 0.36)
+			}
+			ow := w * 2.5
+			if g.x < ow.x || g.x > 1-ow.x || g.y < ow.y || g.y > 1-ow.y {
+				base = outline
+			}
+		}
 	}
 
 	if Selected.x >= 0 && f.x == Selected.x && ij.x == Selected.y && ij.y == Selected.z {

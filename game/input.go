@@ -16,6 +16,16 @@ type gestures struct {
 	zoom         float64 // multiplicative; 1 means no change
 	tap          bool
 	tapX, tapY   float64
+
+	// press is set on the tick a single pointer goes down, at (pressX,
+	// pressY); release on the tick it lifts, at (releaseX, releaseY).
+	// While it's down, (curX, curY) is where it is.
+	press, release     bool
+	pressX, pressY     float64
+	releaseX, releaseY float64
+	curX, curY         float64
+	// pinching is set while two fingers are down.
+	pinching bool
 }
 
 // pointerInput turns mouse and touch input into drag, pinch and tap gestures,
@@ -50,6 +60,7 @@ func (p *pointerInput) update() gestures {
 		p.pinchDist = d
 		p.pinched = true
 		p.down = false
+		gs.pinching = true
 		return gs
 	}
 	p.pinchDist = 0
@@ -72,13 +83,17 @@ func (p *pointerInput) update() gestures {
 		p.lastX, p.lastY = x, y
 		p.moved = 0
 		gs.dragging = true
+		gs.press, gs.pressX, gs.pressY = true, x, y
+		gs.curX, gs.curY = x, y
 	case pressed:
 		gs.dragX, gs.dragY = x-p.lastX, y-p.lastY
 		gs.dragging = true
 		p.moved += math.Hypot(gs.dragX, gs.dragY)
 		p.lastX, p.lastY = x, y
+		gs.curX, gs.curY = x, y
 	case p.down:
 		p.down = false
+		gs.release, gs.releaseX, gs.releaseY = true, p.lastX, p.lastY
 		if !p.pinched && p.moved < tapSlop {
 			gs.tap, gs.tapX, gs.tapY = true, p.lastX, p.lastY
 		}

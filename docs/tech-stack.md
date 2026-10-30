@@ -236,7 +236,7 @@ grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
   life much likelier to take hold nearby.
 - **Economy**: deposits of iron (smelted into metal), fluorite (for
   greenhouse factories) and nitrate (for nitrogen plants), volcanic tiles
-  for geothermal power, and ice for drills. Building types unlock as goals
+  for geothermal power, and ice and seas for water extractors. Building types unlock as goals
   are completed (`BuildingSpec.UnlockedBy`). Comets are aimed like buildings
   and strike after 30 days.
 - **Pacing** is checked by `TestPlaythrough`, whose bot plays every goal; the

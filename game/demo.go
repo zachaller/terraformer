@@ -76,14 +76,14 @@ func placeDemoColony(p *sim.Planet, front sim.Vec3, showcase bool) {
 	p.UnlockAll()
 	p.AddMetal(5000)
 	build(sim.Pylon, free())
-	for bt := sim.IceDrill; bt < sim.NumBuildingTypes; bt++ {
+	for bt := sim.WaterExtractor; bt < sim.NumBuildingTypes; bt++ {
 		c := free()
 		if bt == sim.Comet || bt == sim.Pylon {
 			continue
 		}
 		t := &p.Tiles[g.Index(c)]
 		switch sim.Specs[bt].Site {
-		case sim.IceSite:
+		case sim.WaterSite:
 			t.Ice = 1
 		case sim.VolcanicSite:
 			t.Volcanic = true

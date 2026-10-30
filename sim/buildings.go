@@ -41,7 +41,7 @@ const (
 	Mine
 	Smelter
 	HeaterMachine
-	IceDrill
+	WaterExtractor
 	Electrolyser
 	GreenhouseFactory
 	NitrogenPlant
@@ -91,7 +91,7 @@ type Site int
 const (
 	AnySite      Site = iota
 	DepositSite       // a mineral deposit (mines)
-	IceSite           // ice to drill
+	WaterSite         // ice, or a sea or lake (water extractors)
 	VolcanicSite      // a volcanic tile
 	RemoteSite        // well away from other buildings (comets)
 )
@@ -116,9 +116,9 @@ type BuildingSpec struct {
 
 	Inputs  Amounts // consumed from the input buffer
 	Outputs Amounts // added to the output buffer
-	// Extracts is how much a mine digs from its deposit, or a drill melts
-	// from the ice, per step; the output is the deposit's resource (or
-	// water).
+	// Extracts is how much a mine digs from its deposit, or a water extractor
+	// takes from ice or standing water, per step; the output is the deposit's
+	// resource (or water).
 	Extracts float64
 	// Emits is gas released into the air (negative: taken out of it).
 	Emits Air
@@ -210,12 +210,12 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Outputs:   Amounts{Metal: 0.05},
 		Pollution: 0.05,
 	},
-	IceDrill: {
-		Name:       "Ice drill",
+	WaterExtractor: {
+		Name:       "Water extractor",
 		Category:   CatIndustry,
 		Cost:       10,
 		UnlockedBy: "Warm the ground",
-		Site:       IceSite,
+		Site:       WaterSite,
 		PowerIn:    2,
 		Extracts:   0.001,
 	},
@@ -323,7 +323,7 @@ const (
 	hubReach = 12
 	// demolishRefund is the share of a building's cost returned on demolition.
 	demolishRefund = 0.5
-	// iceToWater is how much water an ice drill gets from one unit of ice.
+	// iceToWater is how much water an extractor gets from one unit of ice.
 	iceToWater = 100
 	// scrubberFloor is the CO₂ (kPa) carbon scrubbers leave in the air, for
 	// plants to keep making oxygen from.

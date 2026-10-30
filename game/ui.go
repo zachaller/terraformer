@@ -64,7 +64,7 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
 	sim.Smelter:           {"Turns 2 ore into 1 metal", "2 power · pollutes"},
-	sim.IceDrill:          {"Melts ice, or pumps sea water, for water", "2 power · on ice or water"},
+	sim.WaterExtractor:    {"Melts ice, or pumps sea water, for water", "2 power · on ice or water"},
 	sim.HeaterMachine:     {"About +30° here, spreading out", "3 power · clean"},
 	sim.DustSpreader:      {"Darkens ice 3 tiles around", "2 power · clean"},
 	sim.GreenhouseFactory: {"Fluorite into super-greenhouse gas", "4 power · pollutes"},
@@ -648,8 +648,8 @@ func placeHint(bt sim.BuildingType) string {
 	switch sim.Specs[bt].Site {
 	case sim.DepositSite:
 		return "Tap a deposit to mine it (they show in the Industry view: gold iron, purple fluorite, pale green nitrate)"
-	case sim.IceSite:
-		return "Tap an icy tile, or a sea or lake, to drill it for water"
+	case sim.WaterSite:
+		return "Tap an icy tile, or a sea or lake, to extract its water"
 	case sim.VolcanicSite:
 		return "Tap a volcanic tile (red in the Industry view)"
 	case sim.RemoteSite:
@@ -731,7 +731,7 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 		}
 		ring(5.8, 2.6, rgba(0xE2553A))
 		u.circle(cx, cy, 2.9*k, rgba(0xFFD36B))
-	case sim.IceDrill:
+	case sim.WaterExtractor:
 		u.circle(cx, cy+3*k, 9*k, rgba(0x9EBCDB))
 		u.circle(cx, cy+3*k, 7*k, rgba(0x4D6B8F))
 		line(-4, 6, 0, -10, 1.3, colIcon)

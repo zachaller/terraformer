@@ -33,7 +33,7 @@ func TestIceDrillFeedsElectrolyser(t *testing.T) {
 	drill := Cell{Diamond: 4, I: 6, J: 8}
 	p.Tiles[p.Grid.Index(drill)].Ice = 1
 	el := Cell{Diamond: 4, I: 7, J: 7}
-	mustBuild(t, p, IceDrill, drill)
+	mustBuild(t, p, WaterExtractor, drill)
 	mustBuild(t, p, Electrolyser, el)
 	for _, c := range []Cell{{Diamond: 4, I: 9, J: 9}, {Diamond: 4, I: 9, J: 7}, {Diamond: 4, I: 7, J: 9}} {
 		mustBuild(t, p, SolarPanel, c)
@@ -46,7 +46,7 @@ func TestIceDrillFeedsElectrolyser(t *testing.T) {
 		t.Fatalf("electrolyser made no oxygen (%.4f → %.4f kPa)", o2, p.Air.O2)
 	}
 	if p.Tile(drill).Ice >= 1 {
-		t.Fatal("ice drill took no ice")
+		t.Fatal("water extractor took no ice")
 	}
 }
 
@@ -57,8 +57,8 @@ func TestSiteRules(t *testing.T) {
 	c := Cell{Diamond: 4, I: 5, J: 5}
 	p.Tiles[p.Grid.Index(c)].Ice = 0
 	p.Tiles[p.Grid.Index(c)].Volcanic = false
-	if _, err := p.Build(IceDrill, c); !errors.Is(err, ErrNoIce) {
-		t.Errorf("ice drill off ice: got %v", err)
+	if _, err := p.Build(WaterExtractor, c); !errors.Is(err, ErrNoWater) {
+		t.Errorf("water extractor off ice: got %v", err)
 	}
 	if _, err := p.Build(Geothermal, c); !errors.Is(err, ErrNotVolcanic) {
 		t.Errorf("geothermal off a volcano: got %v", err)

@@ -67,8 +67,9 @@ uninstall the debug one first, which deletes its save.
   pylons.
   Deposits of iron, fluorite and nitrate, and volcanic tiles, are scattered
   over the planet; buildings unlock as goals are completed. Deposits show
-  as crystal outcrops in their mineral's colour (gold iron, purple fluorite,
-  pale green nitrate), and light up while you place a mine: tapping near
+  as patches of stained ground strewn with boulders flecked in their
+  mineral's colour (gold iron, purple fluorite, pale green nitrate), and
+  light up while you place a mine: tapping near
   one snaps to it, and **Nearest** steps through the free deposits, those
   the colony already reaches first. A mine works its whole patch (its own
   tile and the same mineral next to it), and when the patch is spent one

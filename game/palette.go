@@ -188,10 +188,6 @@ func surfaceColor(t sim.Tile) rgb {
 	// Vary brightness a little with height so flat regions aren't uniform.
 	shade := 0.85 + 0.3*(t.Height+1)/2
 	c := rgb{base[0] * shade, base[1] * shade, base[2] * shade}
-	if t.Ore > 0 { // a deposit: its outcrops are drawn by the shader
-		m := mineralColor(t.Mineral)
-		c = mix(c, rgb{float64(m.R), float64(m.G), float64(m.B)}, 0.18)
-	}
 	c = mix(c, smogColor, t.Pollution)
 	c = mix(c, rgb{c[0] * 0.75, c[1] * 0.75, c[2] * 0.75}, t.Water/0.05) // damp soil
 	c = mix(c, lifeColor, t.Life*0.75)

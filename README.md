@@ -1,5 +1,7 @@
 # Terraformer
 
+[![CI](https://github.com/zachaller/terraformer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zachaller/terraformer/actions/workflows/ci.yml)
+
 A mobile terraforming game in Go with [Ebitengine](https://ebitengine.org):
 shape a barren planet until life takes hold. See
 [docs/tech-stack.md](docs/tech-stack.md) for the design and technical plan.
@@ -11,7 +13,23 @@ shape a barren planet until life takes hold. See
 ![Inspect panel](docs/images/ui-inspect.png)
 ![A living planet: seas, grassland and forest](docs/images/late-game.png)
 
-## Status: first playable (roadmap step 5)
+## Download
+
+The latest builds are on the
+[Releases page](https://github.com/zachaller/terraformer/releases/latest):
+
+| Platform | File | To run it |
+|---|---|---|
+| Android | `Terraformer-<version>.apk` | Open it on the phone and allow installing from your browser or file manager when asked |
+| Mac (Apple silicon or Intel) | `-mac.zip` | Unzip, run `xattr -cr Terraformer.app` in Terminal (the app isn't signed by Apple), then open it |
+| Windows | `-windows.zip` | Unzip and run `Terraformer.exe`; if SmartScreen warns, choose More info → Run anyway |
+| Linux (x86-64) | `-linux.tar.gz` | `tar xzf` it and run `Terraformer/terraformer` |
+
+Until the release signing key is set up, the Android build is a debug APK
+(`-debug.apk`). The first properly signed APK won't install over it:
+uninstall the debug one first, which deletes its save.
+
+## Status: content and polish (roadmap steps 6 and 7)
 
 - A procedurally generated planet covered in a geodesic hex grid (6,252
   tiles by default: hexagons plus the twelve pentagons a sphere needs),

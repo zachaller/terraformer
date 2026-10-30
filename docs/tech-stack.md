@@ -1,6 +1,6 @@
 # Terraformer: Tech Stack & Architecture
 
-Status: decided. Roadmap steps 1–5 are built; see README.md.
+Status: decided. Roadmap steps 1–5 are built, and 6 and 7 are under way; see README.md.
 
 ## The game in one paragraph
 
@@ -264,8 +264,13 @@ grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
    network flow in `sim/` with tests.
 5. ✅ **First playable:** build a small production chain that powers one
    terraforming machine, and watch the planet change and the first life appear.
-6. **Content and polish:** more buildings, biomes, art, audio, UI.
-7. **Release pipeline:** CI AAB build, closed test, Play Store listing.
+6. **Content and polish:** more buildings, biomes, art, audio, UI. Mostly
+   done: 18 buildings, 24 goals, synthesised audio, a first-time
+   walkthrough; still to do: an app icon and more art.
+7. **Release pipeline:** CI and GitHub Releases are done (`.github/workflows/`:
+   tests and every platform's build on each push, and a release from the
+   Actions tab or a version tag). Still to do: the Play upload key, then a
+   closed test and the Play Store listing.
 
 ## Open design questions
 

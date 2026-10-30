@@ -15,6 +15,28 @@ android {
         versionName "0.14.0"
     }
 
+    // Release builds are signed with the upload key when TERRAFORMER_KEYSTORE
+    // (and its passwords) are set, as the release workflow does from secrets.
+    signingConfigs {
+        release {
+            def keystore = System.getenv("TERRAFORMER_KEYSTORE")
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword System.getenv("TERRAFORMER_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("TERRAFORMER_KEY_ALIAS")
+                keyPassword System.getenv("TERRAFORMER_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (System.getenv("TERRAFORMER_KEYSTORE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
     packaging {
         // Compress the Go native libraries; makes the APK much smaller to download.
         jniLibs.useLegacyPackaging = true

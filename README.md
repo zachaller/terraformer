@@ -194,6 +194,60 @@ The script binds the Go game into `android/app/libs/terraformer.aar` with
 over USB (developer options and USB debugging on):
 `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`
 
+A signed release APK and Play Store bundle (AAB) come from
+`scripts/build-android.sh release`, with the upload keystore given by
+`TERRAFORMER_KEYSTORE`, `TERRAFORMER_KEYSTORE_PASSWORD`,
+`TERRAFORMER_KEY_ALIAS` and `TERRAFORMER_KEY_PASSWORD`.
+
+## Desktop packages
+
+`scripts/build-desktop.sh` builds `dist/Terraformer-<version>-mac.zip` (a
+universal Apple silicon and Intel `.app`), `-windows.zip` and, on Linux,
+`-linux.tar.gz`. The Mac and Windows builds cross-compile from any OS. The
+Mac app isn't signed, so after unzipping run `xattr -cr Terraformer.app`
+before opening it the first time.
+
+## Releases
+
+GitHub Actions does it (`.github/workflows/`):
+
+- **CI** runs on every push and pull request: gofmt, `go vet`, all the
+  tests (including the playthrough), and the desktop and Android builds,
+  kept as downloadable artifacts for a week.
+- **Release** runs when a version tag is pushed. It runs the same build,
+  then publishes a GitHub release with the Mac, Windows and Linux packages
+  and the Android APK (and AAB), with notes made from the commits since the
+  last release.
+
+To cut a release, set `versionName` (and bump `versionCode`) in
+`android/app/build.gradle`, commit, then tag that version:
+
+```sh
+git tag v0.14.0 && git push origin v0.14.0
+```
+
+The tag must match `versionName`. A tag with a hyphen (`v0.15.0-beta1`) is
+published as a pre-release.
+
+Android releases are signed with the upload key from these repository
+secrets (Settings → Secrets and variables → Actions). Without them the
+release gets a debug APK and no AAB.
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the keystore file, base64-encoded (`base64 -w0 upload.jks`) |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore's password |
+| `ANDROID_KEY_ALIAS` | the key's alias, e.g. `upload` |
+| `ANDROID_KEY_PASSWORD` | the key's password |
+
+Make the keystore once, and keep it (and its passwords) safe; every Play
+Store update must be signed with the same key:
+
+```sh
+keytool -genkeypair -v -keystore upload.jks -alias upload \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
 ## Tests
 
 ```sh
@@ -210,6 +264,7 @@ game/         Ebitengine front end: camera, input, planet shader, views, UI (ui.
 cmd/desktop/  desktop entry point
 mobile/       Android entry point, bound by ebitenmobile
 android/      thin Android project (one Activity hosting the game view)
-scripts/      build scripts
+scripts/      build and packaging scripts
+.github/      CI and release workflows
 docs/         design and technical docs
 ```

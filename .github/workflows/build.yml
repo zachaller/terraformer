@@ -1,0 +1,102 @@
+# Tests the game and builds every platform's package. CI and Release both
+# call it; Release then publishes what it builds.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        description: Sign the Android build for release (when the signing secrets are set).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # Ebitengine's headers for building on Linux with cgo.
+  LINUX_DEPS: libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config
+  NDK_VERSION: 29.0.14206865
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update -q && sudo apt-get install -yq $LINUX_DEPS
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      # Includes the playthrough test, which checks the game's pacing.
+      - run: go test -timeout 30m ./...
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update -q && sudo apt-get install -yq $LINUX_DEPS
+      - run: scripts/build-desktop.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: dist/*
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }}
+      - name: Install ebitenmobile
+        run: |
+          go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@"$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          TERRAFORMER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TERRAFORMER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TERRAFORMER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          version="$(scripts/version.sh)"
+          mkdir -p dist
+          if [ "$RELEASE" = true ] && [ -n "$KEYSTORE_BASE64" ]; then
+            export TERRAFORMER_KEYSTORE="$RUNNER_TEMP/upload.jks"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$TERRAFORMER_KEYSTORE"
+            scripts/build-android.sh release
+            cp android/app/build/outputs/apk/release/app-release.apk "dist/Terraformer-$version.apk"
+            cp android/app/build/outputs/bundle/release/app-release.aab "dist/Terraformer-$version.aab"
+            rm "$TERRAFORMER_KEYSTORE"
+          else
+            if [ "$RELEASE" = true ]; then
+              echo "::warning::No Android signing secrets are set, so the release gets a debug APK and no Play Store bundle."
+            fi
+            scripts/build-android.sh
+            cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Terraformer-$version-debug.apk"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+          if-no-files-found: error

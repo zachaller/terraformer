@@ -106,7 +106,12 @@ type Game struct {
 	settings      settings
 	audio         *audioSys
 	scape         soundscape // the ambient mix the audio fades towards
-	tutorial      int        // the walkthrough's current step, or -1 when it's off
+	// noteCell and noteState are the tile the inspect sheet last described
+	// and what it said (see lifeNoteAt).
+	noteCell  sim.Cell
+	noteState lifeState
+	noteValid bool
+	tutorial  int // the walkthrough's current step, or -1 when it's off
 	// alertCount and impacts are what the last frame saw, to play sounds
 	// when they change.
 	alertCount, impacts int

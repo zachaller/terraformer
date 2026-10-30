@@ -129,8 +129,8 @@ live there and what's stopping them, and the building's network.
 | Colony overview: resources in stock and made per day, power, buildings by type (tap a "held up" count to see one) | **Colony**, or tap the metal, power or resource chips | |
 | Remove a building (half its metal back) | **Remove** | `X` |
 | Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |
-| Speed (Paused / 1× / 4× / 16×) | Speed pill | `Space` pause, `F` fastest |
-| Atmosphere details | Tap the kPa chip | |
+| Speed (Paused / 1× / 4× / 16×), and the day | Speed pill | `Space` pause, `F` fastest |
+| Atmosphere details | Tap the kPa chip at the top (one row: pressure, temperature, life, metal) | |
 | Collapse the goal card | Tap it | `G` |
 | Close panels, cancel a placement | Close button | `Esc` |
 

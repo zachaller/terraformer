@@ -178,7 +178,7 @@ func (g *Game) runUI(u *ui) {
 			// Messages with a button get a full-width row of their own.
 			planetBottom = g.toast(u, left, narrow, planetBottom) - gap
 		} else {
-			g.toast(u, left+float64(len(speeds))*44+16, narrow, above)
+			g.toast(u, left+g.speedWidth(u)+8, narrow, above)
 		}
 		g.viewRail(u, right, planetTop, planetBottom)
 	}
@@ -261,44 +261,21 @@ func (u *ui) flowChips(chips []chip, left, right, y float64) float64 {
 	return y + chipH
 }
 
+// statusBar is one row of chips: the planet's progress (pressure,
+// temperature, life) and the colony's metal. Tap pressure for the
+// atmosphere sheet and metal for the colony overview, which have the rest.
 func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 	p := g.planet
 	st := p.Stats()
 	chips := []chip{
-		{parts: []chipPart{labelPart("Day"), numPart(fmt.Sprint(p.Ticks/10), colText)}, fill: colChip, border: colBorder},
 		{parts: []chipPart{iconPart(iconAir, colBlue), numPart(pressure(p.Pressure()), colText), labelPart("kPa")}, fill: colChip, border: colBorder, action: g.openAir},
 		{parts: []chipPart{iconPart(iconThermo, colBlue), numPart(degrees(st.AvgTemp), colText)}, fill: colChip, border: colBorder},
 		{parts: []chipPart{iconPart(iconLeaf, colTeal), numPart(fmt.Sprintf("%.1f%%", st.LifeCover*100), colTeal)}, fill: colChip, border: colBorder},
 	}
-	y = u.flowChips(chips, left, right, y)
-	if !p.Landed() {
-		return y
+	if p.Landed() {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, colIcon), numPart(fmt.Sprintf("%.0f", p.Stores()[sim.Metal]), colText)}, fill: colChip, border: colBorder, action: g.openColony})
 	}
-	metal := chip{
-		parts:  []chipPart{iconPart(iconMetal, colIcon), numPart(fmt.Sprintf("%.1f", p.Stores()[sim.Metal]), colText), labelPart("metal")},
-		fill:   colChip,
-		border: colBorder,
-		action: g.openColony,
-	}
-	if rate := g.metalRate(); rate > 0.005 {
-		metal.parts = append(metal.parts, chipPart{text: fmt.Sprintf("+%.1f/day", rate), kind: mono, size: 11, weight: semibold, col: colTeal})
-	}
-	chips = []chip{metal}
-	if lander := p.BuildingAt(p.Grid.CellAt(p.Buildings()[0].Tile)); lander != nil {
-		n := p.NetworkOf(lander)
-		pc := chip{
-			parts:  []chipPart{iconPart(iconBolt, colAmber), numPart(fmt.Sprintf("%.0f / %.0f", n.PowerSupply, n.PowerDemand), colText), labelPart("power")},
-			fill:   colChip,
-			border: colBorder,
-			action: g.openColony,
-		}
-		if n.PowerSatisfaction() < 1 {
-			pc.parts[1].col = colAmber
-			pc.fill, pc.border = colAmberBg, colAmberLn
-		}
-		chips = append(chips, pc)
-	}
-	return u.flowChips(chips, left, right, y+6)
+	return u.flowChips(chips, left, right, y)
 }
 
 // pressure formats kPa with enough digits to see small changes.
@@ -425,9 +402,18 @@ func (g *Game) dock(u *ui, left, right, y float64) {
 	}
 }
 
+// speedWidth is the speed control's width.
+func (g *Game) speedWidth(u *ui) float64 {
+	return float64(len(speeds))*44 + 8 + u.textW(g.dayLabel(), mono, 12, semibold) + 16
+}
+
+func (g *Game) dayLabel() string { return fmt.Sprintf("Day %d", g.planet.Ticks/10) }
+
+// speedControl is the pause and speed buttons, and the day.
 func (g *Game) speedControl(u *ui, x, y float64) {
 	w, h := 44.0, 36.0
-	u.panel(x, y, float64(len(speeds))*w+8, h+8, 14, colChip, colBorder)
+	u.panel(x, y, g.speedWidth(u), h+8, 14, colChip, colBorder)
+	u.text(g.dayLabel(), x+float64(len(speeds))*w+4+10, y+4+(h-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, colMuted)
 	for i := range speeds {
 		bx := x + 4 + float64(i)*w
 		active := g.speed == i
@@ -808,9 +794,6 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 		u.circle(cx, cy+4*k, 2*k, rgba(0x4DB35A))
 	}
 }
-
-// metalRate is metal produced per in-game day, recently.
-func (g *Game) metalRate() float64 { return g.produceRate(sim.Metal) }
 
 // produceRate is how much of resource r was produced per in-game day,
 // recently.

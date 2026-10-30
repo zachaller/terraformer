@@ -266,7 +266,8 @@ grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
    terraforming machine, and watch the planet change and the first life appear.
 6. **Content and polish:** more buildings, biomes, art, audio, UI. Mostly
    done: 18 buildings, 24 goals, synthesised audio, a first-time
-   walkthrough; still to do: an app icon and more art.
+   walkthrough, an app icon (drawn by `cmd/icon`, like the rest of the art,
+   in code); still to do: more art.
 7. **Release pipeline:** CI and GitHub Releases are done (`.github/workflows/`:
    tests and every platform's build on each push, and a release from the
    Actions tab or a version tag). Still to do: the Play upload key, then a

@@ -66,7 +66,13 @@ uninstall the debug one first, which deletes its save.
 - A colony economy: choose a landing site, then build machines, connected by
   pylons.
   Deposits of iron, fluorite and nitrate, and volcanic tiles, are scattered
-  over the planet; buildings unlock as goals are completed.
+  over the planet; buildings unlock as goals are completed. Deposits show
+  as crystal outcrops in their mineral's colour (gold iron, purple fluorite,
+  pale green nitrate), and light up while you place a mine: tapping near
+  one snaps to it, and **Nearest** steps through the free deposits, those
+  the colony already reaches first. A mine works its whole patch (its own
+  tile and the same mineral next to it), and when the patch is spent one
+  tap moves it to the nearest free deposit.
 - 24 goals that guide you from landing to air people could breathe, shown at
   the top of the screen with a hint and progress (tap the card for the full
   list): Land → Dig for ore → Make metal → Warm the ground → Above the triple
@@ -108,7 +114,7 @@ uninstall the debug one first, which deletes its save.
 | Pylon | 3 | | A hub: connects buildings within 4 tiles (load capacity 8), and other pylons and the lander within 12 |
 | Wind turbine | 10 | Thicken the air | Up to 6 power, from 2 kPa, full at 40 kPa |
 | Geothermal | 18 | First life | 10 power on a volcanic tile; warms it |
-| Mine | 6 | | Digs a deposit: iron ore, fluorite or nitrate; 1 power; pollutes |
+| Mine | 6 | | Digs a deposit and the patch of it around: iron ore, fluorite or nitrate; 1 power; pollutes |
 | Smelter | 8 | | Turns 2 ore into 1 metal; 2 power; pollutes heavily |
 | Ice drill | 10 | Warm the ground | Mines ice into water; 2 power |
 | Heater | 6 | | About +30 °C on its tile, +19 °C on the ring around it, fading out; 3 power |

@@ -93,6 +93,9 @@ type Game struct {
 	msgActionLabel string
 
 	pending *sim.Cell // where the building being placed would go
+	// depositNext is how many times Nearest has been tapped while placing
+	// a mine, to step through the free deposits.
+	depositNext int
 
 	goalCollapsed bool
 	goalsOpen     bool          // the goals sheet is showing
@@ -370,7 +373,11 @@ func (g *Game) tapPlanet(x, y float64) {
 	if g.tool == toolInspect {
 		g.focus = &c
 	}
-	if _, ok := g.placing(); ok {
+	if bt, ok := g.placing(); ok {
+		if sim.Specs[bt].Site == sim.DepositSite {
+			c = g.snapToDeposit(c)
+			g.selected = &c
+		}
 		g.pending = &c
 		return
 	}
@@ -491,8 +498,18 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"AreaTint":  tint,
 		"Clouds":    g.cloudCover(),
 		"Air":       float32(g.planet.Pressure() / (g.planet.Pressure() + 20)),
+		"Mining":    g.miningOverlay(),
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
+}
+
+// miningOverlay is 1 while placing a mine, when the shader picks out the
+// deposits, and 0 otherwise.
+func (g *Game) miningOverlay() float32 {
+	if bt, ok := g.placing(); ok && sim.Specs[bt].Site == sim.DepositSite {
+		return 1
+	}
+	return 0
 }
 
 // cloudCover is how cloudy the planet looks, 0 to 1: clouds need water

@@ -282,6 +282,23 @@ func (g *Game) modeBanner(u *ui, left, right, y float64) float64 {
 			sub = "Tap another tile to move it, or Build here"
 		}
 		cost = fmt.Sprintf("%.0f metal", sim.Specs[bt].Cost)
+		if sim.Specs[bt].Site == sim.DepositSite {
+			// Deposits glint on the planet; Nearest steps through the free
+			// ones, those the colony already reaches first.
+			sub = "Tap near a glinting deposit"
+			if g.pending != nil {
+				sub = "Tap another, or Build here"
+			}
+			label := "Nearest"
+			if g.depositNext > 0 {
+				label = "Next"
+			}
+			bw := u.textW(label, sans, 12, bold) + 24
+			bx, by := right-14-bw, y+31
+			u.fillRound(bx, by, bw, 22, 11, colTeal)
+			u.text(label, bx+12, by+(22-u.lineH(sans, 12, bold))/2, sans, 12, bold, rgba(0x06231E))
+			u.area(bx-6, y, bw+20, h, g.nextDeposit)
+		}
 	}
 	u.text(title, left+54, y+11, sans, 14, semibold, colText)
 	u.text(sub, left+54, y+32, sans, 12, regular, colBody)
@@ -324,7 +341,8 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 		}
 	case sim.Mine:
 		if t.Ore > 0 {
-			rows = append(rows, previewRow{iconMetal, mineralColor(t.Mineral), t.Mineral.String(), fmt.Sprintf("%.0f · lasts ~%.0f days", t.Ore, t.Ore/spec.Extracts/10), colText})
+			patch := p.PatchOre(c)
+			rows = append(rows, previewRow{iconMetal, mineralColor(t.Mineral), t.Mineral.String() + " in patch", fmt.Sprintf("%.0f · lasts ~%.0f days", patch, patch/spec.Extracts/10), colText})
 		}
 		warning = "Mines pollute their own tile: no microbes will grow here."
 	case sim.Smelter:

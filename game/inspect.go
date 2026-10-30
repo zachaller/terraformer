@@ -198,6 +198,11 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 				g.atlasDirty = true
 			}
 		}
+		if spec.Site == sim.DepositSite {
+			msg = "This patch of ore is dug out. Move the mine to the nearest free deposit, still connected if one is in reach."
+			fix = fmt.Sprintf("Move to a new deposit · %.0f metal", spec.Cost-spec.Cost/2)
+			action = func() { g.moveMine(c) }
+		}
 	}
 
 	inner := w - 24
@@ -342,7 +347,9 @@ func (g *Game) tileFacts(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) float64
 	if t.Soil > 0.01 {
 		chips = append(chips, chip{parts: []chipPart{iconPart(iconLeaf, rgba(0x9C7A4E)), labelPart("Soil"), numPart(fmt.Sprintf("%.0f%%", t.Soil*100), colText)}, fill: colCard})
 	}
-	if t.Ore > 0 {
+	if b := g.planet.BuildingAt(c); b != nil && b.Type == sim.Mine {
+		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, mineralColor(t.Mineral)), labelPart(t.Mineral.String() + " in patch"), numPart(fmt.Sprintf("%.0f", g.planet.PatchOre(c)), colText)}, fill: colCard})
+	} else if t.Ore > 0 {
 		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, mineralColor(t.Mineral)), labelPart(t.Mineral.String()), numPart(fmt.Sprintf("%.0f", t.Ore), colText)}, fill: colCard})
 	}
 	if t.Volcanic {

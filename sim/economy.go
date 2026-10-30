@@ -470,6 +470,37 @@ func (p *Planet) ringsAround(idx, n int) [][]int {
 	return rings
 }
 
+// mineSource is the tile mine b digs: its own while it has ore, then the
+// deposit tiles next to it of the same mineral with no building on them, so
+// one mine works a whole small patch. -1 means the patch is dug out.
+func (p *Planet) mineSource(b *Building) int {
+	if p.Tiles[b.Tile].Ore > 0 {
+		return b.Tile
+	}
+	m := p.Tiles[b.Tile].Mineral
+	for _, i := range p.Rings(b, 1)[1] {
+		if t := &p.Tiles[i]; t.Ore > 0 && t.Mineral == m && p.eco.at[i] == nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// PatchOre is how much ore a mine on c has (or would have) to dig: the
+// deposit on c and the deposits of the same mineral next to it with no
+// building on them. c should be a deposit or a mine's tile.
+func (p *Planet) PatchOre(c Cell) float64 {
+	idx := p.Grid.Index(c)
+	t := p.Tiles[idx]
+	total := t.Ore
+	for _, i := range p.ringsAround(idx, 1)[1] {
+		if n := p.Tiles[i]; n.Ore > 0 && n.Mineral == t.Mineral && p.eco.at[i] == nil {
+			total += n.Ore
+		}
+	}
+	return total
+}
+
 // runBuilding operates b for one step, as fast as power, inputs, output
 // space and (for mines and drills) what's left to dig allow.
 func (p *Planet) runBuilding(b *Building, power float64) {
@@ -491,9 +522,14 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 			f = min(f, (bufferCap-b.Out[r])/o)
 		}
 	}
+	src := -1
 	switch s.Site {
 	case DepositSite:
-		f = min(f, t.Ore/s.Extracts)
+		ore := 0.0
+		if src = p.mineSource(b); src >= 0 {
+			ore = p.Tiles[src].Ore
+		}
+		f = min(f, ore/s.Extracts)
 	case IceSite:
 		f = min(f, t.Ice/s.Extracts)
 	}
@@ -516,7 +552,9 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 	}
 	switch s.Site {
 	case DepositSite:
-		t.Ore = max(t.Ore-s.Extracts*f, 0)
+		if src >= 0 {
+			p.Tiles[src].Ore = max(p.Tiles[src].Ore-s.Extracts*f, 0)
+		}
 	case IceSite:
 		t.Ice = max(t.Ice-s.Extracts*f, 0)
 	}

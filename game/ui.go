@@ -83,6 +83,7 @@ func (g *Game) setTool(t tool) {
 	g.tool = t
 	g.menuOpen = false
 	g.pending = nil
+	g.depositNext = 0
 	g.selected = nil
 	g.goalsOpen = false
 	g.airOpen = false

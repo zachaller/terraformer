@@ -8,8 +8,9 @@ package main
 // every lattice point, in four bands: tile colour; building data (red:
 // type + 1, or 0 for none; green: activity 0..1; blue: status, as
 // sim.StatusKind); the tile's index (red + 256·green); relief (red:
-// height, green: standing water, blue: how alive); and animals (red:
-// grazers, green: fish, blue: forest, where birds fly).
+// height, green: standing water, blue: how alive); animals (red: grazers,
+// green: fish, blue: forest, where birds fly); and mineral deposits (red:
+// ore, 0 for none; green: mineral × 64).
 //
 // Tile colours are blended smoothly and broken up with noise so the planet
 // looks natural rather than like a ball of hexagons; buildings, selection
@@ -29,6 +30,7 @@ var Grid float       // tile grid line strength, 0 to hide
 var GridAt vec3      // planet-space centre of the patch where grid lines show
 var Clouds float     // cloud cover, 0 to 1 (0 outside the surface view)
 var Air float        // how thick the air is, 0 to 1: the halo and twilight glow
+var Mining float     // 1 while placing a mine: deposits stand out and glint
 
 // A building being placed: its tile index (-1 means none), type + 1,
 // whether the spot is valid, and the tiles it would heat or pollute (unused
@@ -527,6 +529,53 @@ func glowOf(bt float, p vec2, act float) vec3 {
 	return vec3(0)
 }
 
+// mineralColor is the colour of mineral m (as sim.Mineral): gold iron,
+// purple fluorite, pale green nitrate.
+func mineralColor(m float) vec3 {
+	if m < 0.5 {
+		return vec3(0.95, 0.75, 0.29)
+	}
+	if m < 1.5 {
+		return vec3(0.69, 0.49, 0.91)
+	}
+	return vec3(0.72, 0.88, 0.63)
+}
+
+// outcrop draws a deposit at tile-local position p: a bed of dark rock
+// with crystals of its mineral (colour col) breaking through, more of them
+// the more ore is left. glint makes them sparkle, for picking a spot to mine.
+func outcrop(p vec2, seed float, ore float, col vec3, glint float, aa float) vec4 {
+	o := vec4(0)
+	wobble := 0.025 * sin(atan2(p.y, p.x)*5+seed)
+	o = paint(o, vec3(0.3, 0.27, 0.26), cover(sdCircle(p, 0.22)+wobble, aa)*0.45)
+	n := 2 + floor(ore*4)
+	for i := 0; i < 6; i++ {
+		if float(i) >= n {
+			break
+		}
+		k := seed*4.7 + float(i)*1.9
+		base := (vec2(rnd(k), rnd(k+1)) - 0.5) * 0.34
+		ht := 0.09 + 0.07*rnd(k+2)
+		dir := normalize(vec2((rnd(k+3)-0.5)*0.9, 1))
+		perp := vec2(dir.y, -dir.x)
+		mid := base + dir*ht
+		// A shard: a long diamond standing on its base, its shadow first.
+		q := p - mid - vec2(0.02, -0.025)
+		sh := (abs(dot(q, dir))/ht + abs(dot(q, perp))/0.045 - 1) * 0.03
+		o = paint(o, vec3(0.02, 0.02, 0.03), cover(sh, aa)*0.4)
+		q = p - mid
+		side := dot(q, perp)
+		sd := (abs(dot(q, dir))/ht + abs(side)/0.045 - 1) * 0.03
+		face := col * mix(1.3, 0.8, step(0, side))
+		o = paint(o, min(face, vec3(1)), cover(sd, aa))
+		// A sparkle at the tip, now and then.
+		tw := pow(max(sin(Time*(2+rnd(k+4)*2)+k*5), 0), 12) * (0.35 + 0.65*glint)
+		tip := mid + dir*ht*0.8
+		o = paint(o, vec3(1, 0.98, 0.9), cover(sdCircle(p-tip, 0.012+0.02*tw), aa)*tw)
+	}
+	return o
+}
+
 // rnd is a pseudo-random value in [0, 1) for x.
 func rnd(x float) float {
 	return hash(vec2(x, x*1.618+17.3))
@@ -800,6 +849,14 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		}
 		bdata := atlasAt(dm, cij, 1)
 		bt := floor(bdata.r*255 + 0.5)
+		if bt == 0 && tilePx >= 9 {
+			dep := atlasAt(dm, cij, 5)
+			if dep.r > 0 {
+				id := atlasAt(dm, cij, 2)
+				oc := outcrop(tileLocal(d, dm, cij), floor(id.r*255+0.5)+256*floor(id.g*255+0.5), dep.r, mineralColor(floor(dep.g*255/64+0.5)), Mining, aa)
+				base = mix(base, oc.rgb, oc.a*smoothstep(9, 14, tilePx))
+			}
+		}
 		if bt == 0 && tilePx >= 18 {
 			an := atlasAt(dm, cij, 4)
 			if an.r > 0.03 || an.g > 0.03 || an.b > 0.4 {
@@ -848,6 +905,15 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		}
 	}
 
+	if Mining > 0 {
+		// Placing a mine: pick out the deposits and dim everything else.
+		dep := atlasAt(dm, ij, 5)
+		if dep.r > 0 {
+			base = mix(base, mineralColor(floor(dep.g*255/64+0.5)), 0.25)
+		} else {
+			base *= 0.55
+		}
+	}
 	if Area[0] >= 0 {
 		// Tint the tiles the new building would affect, or the inspected
 		// hub covers.

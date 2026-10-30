@@ -86,16 +86,17 @@ var (
 // with a pixel for every lattice point (i, j) in [0, N]², including those on
 // the diamond's edges, which belong to neighbouring diamonds. That way every
 // lattice triangle the shader blends across has all three corners in one
-// block. Five bands of rows hold, for the tile at each lattice point: its
+// block. Six bands of rows hold, for the tile at each lattice point: its
 // colour; building data (red: building type + 1, or 0 for none; green:
 // activity; blue: sim.StatusKind); its tile index (red + 256·green), so
 // the shader can match tiles to the selection and placement preview; its
 // relief (red: height; green: standing water; blue: how alive it is, for
-// plants swaying and microbe mats breathing); and its animals (red:
-// grazers; green: fish; blue: forest, where birds fly).
+// plants swaying and microbe mats breathing); its animals (red: grazers;
+// green: fish; blue: forest, where birds fly); and its mineral deposit
+// (red: how much ore, 0 for none; green: sim.Mineral × 64).
 
 // atlasSize returns the atlas's width and height for grid g.
-func atlasSize(g sim.Grid) (int, int) { return sim.Diamonds * (g.N + 1), 5 * (g.N + 1) }
+func atlasSize(g sim.Grid) (int, int) { return sim.Diamonds * (g.N + 1), 6 * (g.N + 1) }
 
 // atlasSources maps each pixel in a band of the atlas to its tile's index.
 func atlasSources(g sim.Grid) []int32 {
@@ -138,6 +139,11 @@ func fillAtlas(pix []byte, src []int32, p *sim.Planet, v viewMode) {
 		living := min(t.Life*0.5+t.Bio[sim.Grass]+t.Bio[sim.Shrubs]+t.Bio[sim.Forest], 1)
 		copy(pix[3*band+k*4:], []byte{uint8(min(max((t.Height+1)/2, 0), 1) * 255), uint8(wet * 255), uint8(living * 255), 255})
 		copy(pix[4*band+k*4:], []byte{uint8(t.Bio[sim.Grazers] * 255), uint8(t.Bio[sim.Fish] * 255), uint8(t.Bio[sim.Forest] * 255), 255})
+		ore := 0.0
+		if t.Ore > 0 {
+			ore = min(0.05+t.Ore/600, 1)
+		}
+		copy(pix[5*band+k*4:], []byte{uint8(ore * 255), uint8(t.Mineral) * 64, 0, 255})
 	}
 }
 
@@ -182,8 +188,9 @@ func surfaceColor(t sim.Tile) rgb {
 	// Vary brightness a little with height so flat regions aren't uniform.
 	shade := 0.85 + 0.3*(t.Height+1)/2
 	c := rgb{base[0] * shade, base[1] * shade, base[2] * shade}
-	if t.Ore > 0 {
-		c = mix(c, rgb{80, 105, 140}, 0.4) // ore deposit
+	if t.Ore > 0 { // a deposit: its outcrops are drawn by the shader
+		m := mineralColor(t.Mineral)
+		c = mix(c, rgb{float64(m.R), float64(m.G), float64(m.B)}, 0.18)
 	}
 	c = mix(c, smogColor, t.Pollution)
 	c = mix(c, rgb{c[0] * 0.75, c[1] * 0.75, c[2] * 0.75}, t.Water/0.05) // damp soil

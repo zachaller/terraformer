@@ -310,3 +310,32 @@ func TestHubCapacity(t *testing.T) {
 		t.Error("Connection doesn't report the pylon as full")
 	}
 }
+
+// TestMineWorksPatch checks a mine moves on to the deposit tiles next to it,
+// of its own mineral, once its own tile is dug out, and only counts as empty
+// when the whole patch is.
+func TestMineWorksPatch(t *testing.T) {
+	p, _, ore := economyPlanet(t)
+	next := near(ore, 1)
+	other := Cell{Diamond: 4, I: 10, J: 9}
+	oi, ni, xi := p.Grid.Index(ore), p.Grid.Index(next), p.Grid.Index(other)
+	p.Tiles[oi].Ore, p.Tiles[oi].Mineral = 0.3, Iron
+	p.Tiles[ni].Ore, p.Tiles[ni].Mineral = 0.3, Iron
+	p.Tiles[xi].Ore, p.Tiles[xi].Mineral = 5, Fluorite
+	if got := p.PatchOre(ore); math.Abs(got-0.6) > 1e-9 {
+		t.Fatalf("PatchOre = %v, want 0.6 (the iron only)", got)
+	}
+	m := mustBuild(t, p, Mine, ore)
+	for range 40 {
+		p.Step()
+	}
+	if p.Tiles[ni].Ore > 0 {
+		t.Errorf("neighbouring iron not dug: %v left", p.Tiles[ni].Ore)
+	}
+	if p.Tiles[xi].Ore != 5 {
+		t.Errorf("fluorite next door was dug: %v left", p.Tiles[xi].Ore)
+	}
+	if got := p.Diagnose(m).Kind; got != StatusDepleted {
+		t.Errorf("dug-out patch: %v, want Depleted", got)
+	}
+}

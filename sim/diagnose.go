@@ -35,7 +35,7 @@ func (p *Planet) Diagnose(b *Building) Status {
 	case s.Countdown > 0:
 		st.Kind = StatusIncoming
 		return st
-	case s.Site == DepositSite && p.Tiles[b.Tile].Ore <= 0, s.Site == IceSite && p.Tiles[b.Tile].Ice <= 0:
+	case s.Site == DepositSite && p.mineSource(b) < 0, s.Site == IceSite && p.Tiles[b.Tile].Ice <= 0:
 		st.Kind = StatusDepleted
 		return st
 	case s.Wind && p.WindFactor() < 0.05:

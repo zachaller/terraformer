@@ -298,14 +298,6 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 		}
 		chips = append(chips, pc)
 	}
-	for _, r := range []struct {
-		res sim.Resource
-		col color.Color
-	}{{sim.Water, colBlue}, {sim.FluoriteRes, mineralColor(sim.Fluorite)}, {sim.NitrateRes, mineralColor(sim.Nitrate)}} {
-		if v := p.Stores()[r.res]; v >= 0.05 {
-			chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, r.col), numPart(fmt.Sprintf("%.0f", v), colText), labelPart(lower(r.res.String()))}, fill: colChip, border: colBorder, action: g.openColony})
-		}
-	}
 	return u.flowChips(chips, left, right, y+6)
 }
 
@@ -335,7 +327,7 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 	toggle := func() { g.goalCollapsed = !g.goalCollapsed }
 
 	if g.goalCollapsed || g.inspectOpen() || g.menuOpen || g.goalsOpen || g.airOpen || g.colonyOpen {
-		h := 44.0
+		h := 38.0
 		u.panel(left, y, w, h, 14, colChip, colBorder)
 		label := "All goals complete"
 		if ok {
@@ -345,7 +337,7 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 		if ok && prog > 0 {
 			u.textRight(fmt.Sprintf("%.0f%%", prog*100), right-40, y+(h-u.lineH(mono, 13, semibold))/2, mono, 13, semibold, colTeal)
 		}
-		u.icon(iconChevronDown, right-34, y+11, 22, colMuted)
+		u.icon(iconChevronDown, right-34, y+(h-22)/2, 22, colMuted)
 		u.area(left, y, w-48, h, g.openGoals)
 		u.area(right-48, y, 48, h, toggle)
 		return y + h

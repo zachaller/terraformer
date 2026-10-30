@@ -240,27 +240,35 @@ func (g *Game) alerts() []alert {
 
 // alertRows draws up to two alerts from y and returns the bottom.
 func (g *Game) alertRows(u *ui, left, right, y float64) float64 {
+	// Only the most urgent alert, in a slim row; the rest are counted, and
+	// the count opens the colony overview.
 	as := g.alerts()
-	if len(as) > 2 {
-		as = as[:2]
+	if len(as) == 0 {
+		return y
 	}
-	for _, a := range as {
-		y += 6
-		h := 44.0
-		fill, border, fg := color.Color(colCard), color.Color(rgba(0x2B374A)), color.Color(colIcon)
-		if a.warn {
-			fill, border, fg = colAmberBg, colAmberLn, colAmberTx
-		}
-		u.panel(left, y, right-left, h, 14, fill, border)
-		u.icon(a.icon, left+12, y+13, 18, fg)
-		bw := u.textW(a.label, sans, 12, semibold) + 20
-		u.text(a.text, left+40, y+(h-u.lineH(sans, 13, regular))/2, sans, 13, regular, fg)
-		bx := right - bw - 6
-		u.fillRound(bx, y+5, bw, 34, 10, withAlpha(rgba(0x000000), 60))
-		u.strokeRound(bx, y+5, bw, 34, 10, 1, border)
-		u.text(a.label, bx+10, y+5+(34-u.lineH(sans, 12, semibold))/2, sans, 12, semibold, colText)
-		u.area(bx, y+5, bw, 34, a.action)
-		y += h
+	a := as[0]
+	y += 6
+	h := 36.0
+	fill, border, fg := color.Color(colCard), color.Color(rgba(0x2B374A)), color.Color(colIcon)
+	if a.warn {
+		fill, border, fg = colAmberBg, colAmberLn, colAmberTx
 	}
-	return y
+	u.panel(left, y, right-left, h, 12, fill, border)
+	u.icon(a.icon, left+10, y+(h-16)/2, 16, fg)
+	x := right - 4
+	bw := u.textW(a.label, sans, 12, semibold) + 18
+	x -= bw
+	u.fillRound(x, y+4, bw, h-8, 9, withAlpha(rgba(0x000000), 60))
+	u.text(a.label, x+9, y+(h-u.lineH(sans, 12, semibold))/2, sans, 12, semibold, colText)
+	u.area(x, y, bw, h, a.action)
+	if more := len(as) - 1; more > 0 {
+		label := fmt.Sprintf("+%d", more)
+		mw := u.textW(label, mono, 12, semibold) + 16
+		x -= mw + 4
+		u.fillRound(x, y+4, mw, h-8, 9, withAlpha(rgba(0x000000), 60))
+		u.text(label, x+8, y+(h-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, fg)
+		u.area(x, y, mw, h, g.openColony)
+	}
+	u.text(a.text, left+34, y+(h-u.lineH(sans, 12, regular))/2, sans, 12, regular, fg)
+	return y + h
 }

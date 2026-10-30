@@ -102,7 +102,8 @@ type Game struct {
 	colonyOpen    bool          // the colony overview is showing
 	settings      settings
 	audio         *audioSys
-	tutorial      int // the walkthrough's current step, or -1 when it's off
+	scape         soundscape // the ambient mix the audio fades towards
+	tutorial      int        // the walkthrough's current step, or -1 when it's off
 	// alertCount and impacts are what the last frame saw, to play sounds
 	// when they change.
 	alertCount, impacts int
@@ -488,8 +489,21 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Area":      area,
 		"AreaAmt":   areaAmt,
 		"AreaTint":  tint,
+		"Clouds":    g.cloudCover(),
+		"Air":       float32(g.planet.Pressure() / (g.planet.Pressure() + 20)),
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
+}
+
+// cloudCover is how cloudy the planet looks, 0 to 1: clouds need water
+// vapour and air thick enough to hold it. Only the surface view shows them.
+func (g *Game) cloudCover() float32 {
+	if g.view != viewSurface {
+		return 0
+	}
+	p := g.planet
+	thick := min(max((p.Pressure()-1)/15, 0), 1)
+	return float32(min(p.Humidity()*1.6, 1) * thick)
 }
 
 // highlighted is the tile to highlight: the selected one.
@@ -538,7 +552,10 @@ func (g *Game) sound(id soundID) {
 // impacts.
 func (g *Game) updateSound() {
 	p := g.planet
-	g.audio.update(p.Stats().LifeCover, g.settings.Sound)
+	if g.audio != nil && g.ticks%15 == 0 {
+		g.scape = g.soundscape()
+	}
+	g.audio.update(g.scape, g.settings.Sound)
 	if n := len(g.alerts()); n > g.alertCount {
 		g.sound(sndAlert)
 		g.alertCount = n

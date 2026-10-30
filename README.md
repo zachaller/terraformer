@@ -84,9 +84,14 @@ uninstall the debug one first, which deletes its save.
   needs) and placement previews. Buildings are drawn in the shader with
   status badges (bolt: short of power; broken link: not connected;
   !: blocked; -: deposit empty).
-- Sound, all synthesised in code (`game/audio.go`): wind and a low drone
-  on a barren planet, with a warm chord and bells fading in as life spreads,
-  and effects for taps, building, goals, alerts and comet impacts. Switch it
+- Sound, all synthesised in code (`game/audio.go`), that follows the
+  planet: a thin hiss while there's hardly any air to carry sound, wind
+  that deepens and gusts as the air thickens, a low drone on a barren
+  world, rain once the air is humid and there's liquid water, surf on the
+  seas, crickets once plants spread, birdsong once animals appear, warm
+  chords as life takes hold, and the hum and clank of the colony when you
+  zoom in on it. Effects differ by building category (power, industry,
+  climate, air, projects) and all ring out with a little reverb. Switch it
   off from the Build menu.
 - A first-time walkthrough of six short cards (turning the planet, landing,
   first mine and smelter, pylons, where to find things), waiting for the

@@ -86,13 +86,14 @@ var (
 // with a pixel for every lattice point (i, j) in [0, N]², including those on
 // the diamond's edges, which belong to neighbouring diamonds. That way every
 // lattice triangle the shader blends across has all three corners in one
-// block. Three bands of rows hold, for the tile at each lattice point: its
+// block. Four bands of rows hold, for the tile at each lattice point: its
 // colour; building data (red: building type + 1, or 0 for none; green:
-// activity; blue: sim.StatusKind); and its tile index (red + 256·green), so
-// the shader can match tiles to the selection and placement preview.
+// activity; blue: sim.StatusKind); its tile index (red + 256·green), so
+// the shader can match tiles to the selection and placement preview; and
+// its relief (red: height; green: standing water).
 
 // atlasSize returns the atlas's width and height for grid g.
-func atlasSize(g sim.Grid) (int, int) { return sim.Diamonds * (g.N + 1), 3 * (g.N + 1) }
+func atlasSize(g sim.Grid) (int, int) { return sim.Diamonds * (g.N + 1), 4 * (g.N + 1) }
 
 // atlasSources maps each pixel in a band of the atlas to its tile's index.
 func atlasSources(g sim.Grid) []int32 {
@@ -127,6 +128,11 @@ func fillAtlas(pix []byte, src []int32, p *sim.Planet, v viewMode) {
 		copy(pix[k*4:], []byte{uint8(col[0]), uint8(col[1]), uint8(col[2]), 255})
 		copy(pix[band+k*4:], []byte{b.typ, b.act, b.status, 255})
 		copy(pix[2*band+k*4:], []byte{uint8(idx), uint8(idx >> 8), 0, 255})
+		// Relief and water for the shader's lighting: height, and how much
+		// standing water there is (as in surfaceColor), less any ice on it.
+		t := p.Tiles[idx]
+		wet := min(max((t.Water-0.05)*4, 0), 1) * max(1-t.Ice*2, 0)
+		copy(pix[3*band+k*4:], []byte{uint8(min(max((t.Height+1)/2, 0), 1) * 255), uint8(wet * 255), 0, 255})
 	}
 }
 

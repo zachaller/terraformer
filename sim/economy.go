@@ -629,3 +629,6 @@ func (p *Planet) distribute(n *Network, r Resource) {
 // AddMetal puts metal straight into the colony's stores. It's for demos and
 // screenshots.
 func (p *Planet) AddMetal(m float64) { p.eco.Stores[Metal] += m }
+
+// Impacts is how many comets have struck.
+func (p *Planet) Impacts() int { return p.impacts }

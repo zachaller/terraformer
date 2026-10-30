@@ -33,6 +33,9 @@ const messageTime = 4
 type Options struct {
 	Seed     uint64
 	GridSize int // hex grid size (sim.Grid.N)
+	// NoAudio turns sound off entirely (for machines with no audio device,
+	// where starting it would fail).
+	NoAudio bool
 
 	// DemoHeaters puts fixed warmth on a ring of tiles around the equator.
 	DemoHeaters bool
@@ -97,6 +100,12 @@ type Game struct {
 	buildTab      sim.Category  // the build menu's category
 	prodHist      []sim.Amounts // resources produced so far, sampled each day
 	colonyOpen    bool          // the colony overview is showing
+	settings      settings
+	audio         *audioSys
+	tutorial      int // the walkthrough's current step, or -1 when it's off
+	// alertCount and impacts are what the last frame saw, to play sounds
+	// when they change.
+	alertCount, impacts int
 
 	// planetTarget is the screen area (x, y, w, h in pixels) the UI leaves
 	// for the planet; planetArea eases towards it so the planet glides
@@ -125,10 +134,12 @@ func New(opts Options) (*Game, error) {
 	}
 	p := sim.NewPlanet(opts.GridSize, opts.Seed)
 	g := &Game{
-		opts:   opts,
-		shader: shader,
-		cam:    newCamera(),
-		speed:  1,
+		opts:     opts,
+		shader:   shader,
+		cam:      newCamera(),
+		speed:    1,
+		tutorial: -1,
+		settings: settings{Sound: true},
 	}
 	g.setPlanet(p)
 	for v := range numViews {
@@ -183,9 +194,17 @@ func (g *Game) Update() error {
 	g.runUI(g.newUI(nil))
 	g.easePlanetArea()
 	g.layoutCamera()
-	if g.ticks == 1 && g.savingEnabled() {
-		g.loadSave()
-		g.lastSave = g.ticks
+	if g.ticks == 1 {
+		if g.savingEnabled() {
+			g.loadSave()
+			g.lastSave = g.ticks
+			g.settings = loadSettings()
+			g.tutorial = tutorialFor(g)
+		}
+		g.alertCount, g.impacts = len(g.alerts()), g.planet.Impacts()
+		if g.opts.ScreenshotPath == "" && !g.opts.NoAudio {
+			g.audio = newAudio()
+		}
 	}
 
 	g.handleKeys()
@@ -208,6 +227,7 @@ func (g *Game) Update() error {
 		case !u.hit:
 			g.tapPlanet(gs.tapX, gs.tapY)
 		case u.action != nil:
+			g.sound(sndClick)
 			u.action()
 		}
 	}
@@ -237,6 +257,8 @@ func (g *Game) Update() error {
 		}
 	}
 	g.announceGoals()
+	g.updateSound()
+	g.advanceTutorial()
 	if g.savingEnabled() {
 		g.autosave()
 	}
@@ -364,6 +386,7 @@ func (g *Game) tapPlanet(x, y float64) {
 		if err := p.Demolish(c); err != nil {
 			g.showMessage(err.Error(), msgWarn)
 		} else {
+			g.sound(sndRemove)
 			g.showMessage("Removed. Half its metal was refunded", msgInfo)
 		}
 	}
@@ -501,4 +524,29 @@ func savePNG(screen *ebiten.Image, path string) error {
 	}
 	defer f.Close()
 	return png.Encode(f, img)
+}
+
+// sound plays effect id, if sound is on.
+func (g *Game) sound(id soundID) {
+	if g.settings.Sound {
+		g.audio.play(id)
+	}
+}
+
+// updateSound keeps the ambient sound in step with the planet, and plays
+// effects for things that happen on their own: new alerts and comet
+// impacts.
+func (g *Game) updateSound() {
+	p := g.planet
+	g.audio.update(p.Stats().LifeCover, g.settings.Sound)
+	if n := len(g.alerts()); n > g.alertCount {
+		g.sound(sndAlert)
+		g.alertCount = n
+	} else {
+		g.alertCount = n
+	}
+	if n := p.Impacts(); n > g.impacts {
+		g.sound(sndImpact)
+		g.impacts = n
+	}
 }

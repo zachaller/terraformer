@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/zachaller/terraformer/game"
@@ -29,7 +30,13 @@ func main() {
 	flag.IntVar(&winH, "height", 720, "window height")
 	flag.StringVar(&safe, "safe-area", "", "simulate phone system bars: insets in pixels as left,top,right,bottom")
 	flag.BoolVar(&opts.NoSave, "no-save", false, "don't load or save the game")
+	flag.BoolVar(&opts.NoAudio, "no-audio", false, "turn sound off entirely")
 	flag.Parse()
+	// Starting audio with no sound device is fatal; Linux machines without
+	// one (servers, containers) run silently.
+	if _, err := os.Stat("/dev/snd"); runtime.GOOS == "linux" && err != nil {
+		opts.NoAudio = true
+	}
 
 	if dir, err := os.UserConfigDir(); err == nil {
 		game.SetSaveDir(filepath.Join(dir, "terraformer"))

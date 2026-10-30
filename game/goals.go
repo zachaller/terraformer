@@ -26,6 +26,7 @@ func (g *Game) announceGoals() {
 	if done == 0 {
 		return
 	}
+	g.sound(sndGoal)
 	msg := "Goal complete: " + sim.Goals[done-1].Name + "!"
 	if done < len(sim.Goals) {
 		msg += " Next: " + sim.Goals[done].Name

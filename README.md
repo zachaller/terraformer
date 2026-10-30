@@ -66,6 +66,14 @@ shape a barren planet until life takes hold. See
   needs) and placement previews. Buildings are drawn in the shader with
   status badges (bolt: short of power; broken link: not connected;
   !: blocked; -: deposit empty).
+- Sound, all synthesised in code (`game/audio.go`): wind and a low drone
+  on a barren planet, with a warm chord and bells fading in as life spreads,
+  and effects for taps, building, goals, alerts and comet impacts. Switch it
+  off from the Build menu.
+- A first-time walkthrough of six short cards (turning the planet, landing,
+  first mine and smelter, pylons, where to find things), waiting for the
+  player where it asks them to do something. Skip ends it; it's only shown
+  once (kept in `settings.json` beside the save).
 - Automatic saving every 30 seconds, when the app goes into the background,
   and when the desktop window closes. **Tool → New planet** (tap twice)
   starts over on a fresh planet.
@@ -153,6 +161,7 @@ go run ./cmd/desktop -seed 7 -size 64
 | Flag | Default | Meaning |
 |---|---|---|
 | `-seed` | 1 | Seed for a new planet (ignored when continuing a save); the same seed always gives the same planet |
+| `-no-audio` | false | Turn sound off (automatic on Linux machines with no sound device) |
 | `-no-save` | false | Don't load or save the game (saves live in your user config directory under `terraformer/`) |
 | `-size` | 25 | Hex grid size: steps along each icosahedron edge (total tiles = 10 × size² + 2) |
 | `-view` | surface | Starting view: `surface`, `temp`, `water`, `life` or `industry` |

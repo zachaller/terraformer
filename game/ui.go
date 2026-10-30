@@ -149,7 +149,10 @@ func (g *Game) runUI(u *ui) {
 		u.panel(left, bottom-h, narrow-left, h, 16, colChip, colBorder)
 		msg := "Tap the planet to choose your landing site"
 		u.text(msg, left+(narrow-left-u.textW(msg, sans, 14, semibold))/2, bottom-h/2-u.lineH(sans, 14, semibold)/2, sans, 14, semibold, colText)
-		planetBottom = bottom - h - gap
+		planetBottom = g.tutorialCard(u, left, narrow, bottom-h-gap)
+		if planetBottom < bottom-h-gap {
+			planetBottom -= gap
+		}
 		g.toast(u, left, narrow, planetBottom)
 	case g.goalsOpen:
 		beside(g.goalsSheet(u, sl, sheetRight, H))
@@ -174,6 +177,9 @@ func (g *Game) runUI(u *ui) {
 		speedTop := above - 44
 		g.speedControl(u, left, speedTop)
 		planetBottom = speedTop - gap
+		if top := g.tutorialCard(u, left, narrow, planetBottom); top < planetBottom {
+			planetBottom = top - gap
+		}
 		if g.msgAction != nil && g.ticks < g.msgUntil {
 			// Messages with a button get a full-width row of their own.
 			planetBottom = g.toast(u, left, narrow, planetBottom) - gap
@@ -395,6 +401,9 @@ func (g *Game) dock(u *ui, left, right, y float64) {
 			fill, border = colActiveBg, colActive
 		}
 		u.panel(x, y, w, dockH, 16, fill, border)
+		if hl := g.tutorialHighlight(); hl != "" && strings.EqualFold(hl, b.label) {
+			u.strokeRound(x-2, y-2, w+4, dockH+4, 18, 3, g.pulse())
+		}
 		u.icon(b.icon, x+(w-22)/2, y+10, 22, fg)
 		lw := u.textW(b.label, sans, 12, semibold)
 		u.text(b.label, x+(w-lw)/2, y+38, sans, 12, semibold, fg)
@@ -612,7 +621,17 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		label, col = "Tap again to abandon this planet", colRed
 	}
 	u.text(label, x, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, col)
-	u.area(x, fy, inner, 40, func() {
+	sound := "Sound: off"
+	if g.settings.Sound {
+		sound = "Sound: on"
+	}
+	sw := u.textW(sound, sans, 13, semibold)
+	u.text(sound, x+inner-sw, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, colBody)
+	u.area(x+inner-sw-12, fy, sw+12, 40, func() {
+		g.settings.Sound = !g.settings.Sound
+		g.saveSettings()
+	})
+	u.area(x, fy, inner-sw-24, 40, func() {
 		if g.ticks < g.confirmNewUntil {
 			g.confirmNewUntil = 0
 			g.newPlanet()

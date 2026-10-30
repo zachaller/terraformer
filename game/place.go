@@ -36,6 +36,7 @@ func (g *Game) confirmPlacement() {
 	}
 	g.pending = nil
 	g.atlasDirty = true
+	g.sound(sndBuild)
 	b := p.BuildingAt(c)
 	switch {
 	case p.NetworkOf(b).HasDepot:

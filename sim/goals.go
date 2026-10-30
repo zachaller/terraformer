@@ -40,7 +40,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Above the triple point",
-		Hint: "Air this thin can't hold liquid water: warmed ice just turns to vapour. Heat the ground to drive out the CO2 frozen in it, or dust the polar caps (Dust spreader) so their dry ice turns to gas. Reach 0.62 kPa",
+		Hint: "Air this thin can't hold liquid water: warmed ice just turns to vapour. Heat the ground to drive out the CO2 frozen in it, or dust the polar caps (Dust spreader) so their dry ice turns to gas. Reach 0.62 kPa of air pressure",
 		Progress: func(p *Planet) float64 {
 			return (p.Pressure() - startAir.Pressure()) / (TriplePoint - startAir.Pressure())
 		},
@@ -68,14 +68,14 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Super greenhouse",
-		Hint: "Mine fluorite (purple in the Industry view) and build a Greenhouse factory: its gases trap thousands of times more heat than CO2. Reach 0.3 Pa",
+		Hint: "Mine fluorite (purple in the Industry view) and build a Greenhouse factory: its gases trap thousands of times more heat than CO2. Reach 0.3 Pa of them in the air",
 		Progress: func(p *Planet) float64 {
 			return p.Air.PFC / 0.3
 		},
 	},
 	{
 		Name: "Thicken the air",
-		Hint: "Warmth drives CO2 out of the ground and the caps, which warms the planet further. Reach 5 kPa",
+		Hint: "Warmth drives CO2 out of the ground and the caps, which warms the planet further. Reach 5 kPa of air pressure",
 		Progress: func(p *Planet) float64 {
 			return (p.Pressure() - TriplePoint) / (5 - TriplePoint)
 		},
@@ -103,7 +103,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "A breath of oxygen",
-		Hint: "Oxygen forms an ozone layer that shields land plants from ultraviolet light. Electrolysers split water (from Ice drills) into it; plankton and moss make it too. Reach 0.6 kPa",
+		Hint: "Oxygen forms an ozone layer that shields land plants from ultraviolet light. Electrolysers split water (from Ice drills) into it; plankton and moss make it too. Reach 0.6 kPa of oxygen",
 		Progress: func(p *Planet) float64 {
 			return p.Air.O2 / 0.6
 		},
@@ -117,7 +117,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Nitrogen",
-		Hint: "Plants need nitrogen. Mine nitrates (pale green in the Industry view) for a Nitrogen plant, or aim a Comet. Reach 3 kPa",
+		Hint: "Plants need nitrogen. Mine nitrates (pale green in the Industry view) for a Nitrogen plant, or aim a Comet. Reach 3 kPa of nitrogen in the air (the air sheet shows how much there is)",
 		Progress: func(p *Planet) float64 {
 			return p.Air.N2 / 3
 		},

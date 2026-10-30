@@ -11,8 +11,8 @@ android {
         applicationId "com.zachaller.terraformer"
         minSdk 23
         targetSdk 36
-        versionCode 48
-        versionName "0.17.3"
+        versionCode 49
+        versionName "0.17.4"
     }
 
     // Release builds are signed with the upload key when TERRAFORMER_KEYSTORE

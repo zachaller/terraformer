@@ -358,9 +358,14 @@ func (g *Game) placementPreview(bt sim.BuildingType, c sim.Cell) (rows []preview
 			warning = "The air is still thin: turbines make little power until it's several kPa."
 		}
 	case sim.IceDrill:
-		rows = append(rows, previewRow{iconDrop, colBlue, "Ice here", fmt.Sprintf("%.2f", t.Ice), colText})
-		if t.Ice < 0.05 {
-			warning = "Ice drills need ice to drill."
+		if t.Ice >= 0.05 || t.Water < 0.2 {
+			rows = append(rows, previewRow{iconDrop, colBlue, "Ice here", fmt.Sprintf("%.2f", t.Ice), colText})
+		}
+		if t.Water >= 0.2 {
+			rows = append(rows, previewRow{iconDrop, colBlue, "Water to pump", fmt.Sprintf("%.2f deep", t.Water), colText})
+		}
+		if t.Ice < 0.05 && t.Water < 0.2 {
+			warning = "Ice drills need ice, or a sea or lake to pump."
 		}
 	case sim.DustSpreader:
 		rows = append(rows, previewRow{iconAir, colIcon, "Dusts ice", fmt.Sprintf("up to %d tiles around", spec.DustRings), colText})

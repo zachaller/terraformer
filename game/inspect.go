@@ -177,6 +177,15 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	case sim.StatusNoInput:
 		msg = fmt.Sprintf("Waiting for %s. Connect it to the colony, whose stores supply it: within 4 tiles of the lander or a connected pylon.", lower(st.Resource.String()))
 		fix, action = pylonFix, addPylon
+		if st.Resource == sim.Water && p.Stores()[sim.Water] < 0.5 {
+			// The colony has no water at all: it needs a drill, not a link.
+			msg = "Waiting for water, and the colony has none. Ice drills supply it: build one on ice, or once the ice has melted, on a sea or lake."
+			fix = fmt.Sprintf("Build an Ice drill · %.0f metal", sim.Specs[sim.IceDrill].Cost)
+			action = func() {
+				g.setTool(buildTool(sim.IceDrill))
+				g.showMessage("Tap an icy tile, or a sea or lake, near a hub to place the drill", msgInfo)
+			}
+		}
 	case sim.StatusOutputFull:
 		msg = fmt.Sprintf("Its %s has nowhere to go. Connect it to the colony so it reaches the stores.", lower(st.Resource.String()))
 		fix, action = pylonFix, addPylon
@@ -189,7 +198,7 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 	case sim.StatusDepleted:
 		msg = "This deposit is empty. Remove the mine and build a new one on another deposit (Industry view)."
 		if spec.Site == sim.IceSite {
-			msg = "The ice here is gone. Remove the drill and build it on another icy tile."
+			msg = "The ice and water here are gone. Remove the drill and build it on ice, or on a sea or lake."
 		}
 		fix = fmt.Sprintf("Remove · +%.0f metal", spec.Cost/2)
 		action = func() {
@@ -309,7 +318,10 @@ func runningMessage(p *sim.Planet, b *sim.Building) string {
 	case sim.WindTurbine:
 		return fmt.Sprintf("Makes %.1f of its %.0f power in %s kPa of air.", spec.PowerOut*p.WindFactor(), spec.PowerOut, pressure(p.Pressure()))
 	case sim.IceDrill:
-		return "Melts ice into water for the colony's stores."
+		if p.Tiles[b.Tile].Ice > 0 {
+			return "Melts ice into water for the colony's stores."
+		}
+		return "Pumps water from the sea for the colony's stores."
 	case sim.Electrolyser:
 		return fmt.Sprintf("Splits water into oxygen: +%.2f kPa a year.", spec.Emits.O2*3650)
 	case sim.GreenhouseFactory:

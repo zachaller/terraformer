@@ -117,7 +117,7 @@ uninstall the debug one first, which deletes its save.
 | Geothermal | 18 | First life | 10 power on a volcanic tile; warms it |
 | Mine | 6 | | Digs a deposit and the patch of it around: iron ore, fluorite or nitrate; 1 power; pollutes |
 | Smelter | 8 | | Turns 2 ore into 1 metal; 2 power; pollutes heavily |
-| Ice drill | 10 | Warm the ground | Mines ice into water; 2 power |
+| Ice drill | 10 | Warm the ground | Melts ice into water, or pumps it from a sea or lake once the ice has melted; 2 power |
 | Heater | 6 | | About +30 °C on its tile, +19 °C on the ring around it, fading out; 3 power |
 | Dust spreader | 12 | Warm the ground | Darkens ice up to 3 tiles around so it absorbs sunlight; 2 power |
 | Greenhouse factory | 25 | Liquid water | Turns fluorite into PFCs, which warm the whole planet; 4 power |

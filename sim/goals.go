@@ -152,7 +152,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Oxygen-rich",
-		Hint: "Plants turn CO2 into oxygen. Spread them, and keep the planet warm with greenhouse gases as CO2 falls. Reach 10 kPa of oxygen",
+		Hint: "Plants turn CO2 into oxygen: spread them, forest most of all, and keep the planet warm with greenhouse gases as CO2 falls. Electrolysers speed it up, fed by Ice drills on ice or, once it's melted, on seas. Reach 10 kPa of oxygen",
 		Progress: func(p *Planet) float64 {
 			return p.Air.O2 / 10
 		},

@@ -339,3 +339,32 @@ func TestMineWorksPatch(t *testing.T) {
 		t.Errorf("dug-out patch: %v, want Depleted", got)
 	}
 }
+
+// TestDrillPumpsSea checks an ice drill can go on a sea with no ice and
+// pumps its water into the stores, and can't go on dry, ice-free ground.
+func TestDrillPumpsSea(t *testing.T) {
+	p, lander, _ := economyPlanet(t)
+	p.goalsDone = GoalIndex("Warm the ground") + 1
+	sea := Cell{Diamond: lander.Diamond, I: lander.I + 1, J: lander.J + 1}
+	dry := Cell{Diamond: lander.Diamond, I: lander.I - 1, J: lander.J + 1}
+	for _, c := range []Cell{sea, dry} {
+		tl := &p.Tiles[p.Grid.Index(c)]
+		tl.Ice, tl.Water = 0, 0
+	}
+	p.Tiles[p.Grid.Index(sea)].Water = 0.5
+	if _, err := p.Build(IceDrill, dry); !errors.Is(err, ErrNoIce) {
+		t.Fatalf("drill on dry ground: got %v, want ErrNoIce", err)
+	}
+	p.eco.Stores[Metal] += 50
+	mustBuild(t, p, IceDrill, sea)
+	before := p.Stores()[Water]
+	for range 20 {
+		p.Step()
+	}
+	if got := p.Stores()[Water]; got <= before {
+		t.Errorf("stores water %v, want more than %v", got, before)
+	}
+	if got := p.Tiles[p.Grid.Index(sea)].Water; got >= 0.5 {
+		t.Errorf("sea still %v deep, want pumped below 0.5", got)
+	}
+}

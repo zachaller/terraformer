@@ -64,7 +64,7 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
 	sim.Smelter:           {"Turns 2 ore into 1 metal", "2 power · pollutes"},
-	sim.IceDrill:          {"Mines ice for water", "2 power · on ice"},
+	sim.IceDrill:          {"Melts ice, or pumps sea water, for water", "2 power · on ice or water"},
 	sim.HeaterMachine:     {"About +30° here, spreading out", "3 power · clean"},
 	sim.DustSpreader:      {"Darkens ice 3 tiles around", "2 power · clean"},
 	sim.GreenhouseFactory: {"Fluorite into super-greenhouse gas", "4 power · pollutes"},
@@ -649,7 +649,7 @@ func placeHint(bt sim.BuildingType) string {
 	case sim.DepositSite:
 		return "Tap a deposit to mine it (they show in the Industry view: gold iron, purple fluorite, pale green nitrate)"
 	case sim.IceSite:
-		return "Tap an icy tile to drill it"
+		return "Tap an icy tile, or a sea or lake, to drill it for water"
 	case sim.VolcanicSite:
 		return "Tap a volcanic tile (red in the Industry view)"
 	case sim.RemoteSite:

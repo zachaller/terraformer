@@ -103,7 +103,7 @@ var (
 	ErrAlreadyLanded = errors.New("The lander has already touched down")
 	ErrOccupied      = errors.New("There's already a building here")
 	ErrNoOre         = errors.New("Mines must go on a mineral deposit")
-	ErrNoIce         = errors.New("Ice drills must go on ice")
+	ErrNoIce         = errors.New("Ice drills must go on ice, or on a sea or lake to pump its water")
 	ErrNotVolcanic   = errors.New("Geothermal plants must go on a volcanic tile")
 	ErrUnique        = errors.New("You can only have one of those")
 	ErrLander        = errors.New("The lander can't be demolished")
@@ -135,7 +135,7 @@ func (p *Planet) CanBuild(t BuildingType, c Cell) error {
 		return fmt.Errorf("%s unlocks after the goal %q", spec.Name, spec.UnlockedBy)
 	case spec.Site == DepositSite && p.Tiles[idx].Ore <= 0:
 		return ErrNoOre
-	case spec.Site == IceSite && p.Tiles[idx].Ice < 0.05:
+	case spec.Site == IceSite && p.Tiles[idx].Ice < 0.05 && p.Tiles[idx].Water < standingWater:
 		return ErrNoIce
 	case spec.Site == VolcanicSite && !p.Tiles[idx].Volcanic:
 		return ErrNotVolcanic
@@ -470,6 +470,13 @@ func (p *Planet) ringsAround(idx, n int) [][]int {
 	return rings
 }
 
+// DrillWater is how much an ice drill on tile t can still take, as a depth:
+// its ice, and once that's gone, any standing water above what the ground
+// holds as moisture, so drills keep working after the ice melts into seas.
+func DrillWater(t Tile) float64 {
+	return t.Ice + max(t.Water-soilRetention, 0)
+}
+
 // mineSource is the tile mine b digs: its own while it has ore, then the
 // deposit tiles next to it of the same mineral with no building on them, so
 // one mine works a whole small patch. -1 means the patch is dug out.
@@ -531,7 +538,7 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 		}
 		f = min(f, ore/s.Extracts)
 	case IceSite:
-		f = min(f, t.Ice/s.Extracts)
+		f = min(f, DrillWater(*t)/s.Extracts)
 	}
 	if s.Emits.CO2 < 0 {
 		// A scrubber can't take more CO₂ than there is.
@@ -556,7 +563,11 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 			p.Tiles[src].Ore = max(p.Tiles[src].Ore-s.Extracts*f, 0)
 		}
 	case IceSite:
-		t.Ice = max(t.Ice-s.Extracts*f, 0)
+		// Ice first; once it's gone, pump the standing water.
+		dug := s.Extracts * f
+		fromIce := min(dug, t.Ice)
+		t.Ice -= fromIce
+		t.Water = max(t.Water-(dug-fromIce), 0)
 	}
 	p.Air.CO2 += s.Emits.CO2 * f
 	p.Air.N2 += s.Emits.N2 * f

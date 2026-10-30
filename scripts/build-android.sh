@@ -21,6 +21,7 @@ if [[ "$mode" == release ]]; then
   : "${TERRAFORMER_KEYSTORE:?set TERRAFORMER_KEYSTORE to the upload keystore to sign a release}"
 fi
 
+mkdir -p android/app/libs
 ebitenmobile bind -target android -androidapi 23 -ldflags="-s -w" \
   -javapkg com.zachaller.terraformer \
   -o android/app/libs/terraformer.aar ./mobile

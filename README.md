@@ -8,10 +8,10 @@ shape a barren planet until life takes hold. See
 
 ![Starting planet](docs/images/globe-prototype.png)
 ![After warming: the first seas and life](docs/images/terraformed.png)
-![A colony with one of every building, and its pollution](docs/images/colony.png)
+![A colony with one of every building on rugged ground, and its pollution](docs/images/colony.png)
 ![Main screen: goal card, alert, map views, speed and tools](docs/images/ui-main.png)
 ![Inspecting a heater that's short of power](docs/images/ui-inspect.png)
-![A living planet: seas, grassland and forest](docs/images/late-game.png)
+![A living planet: seas, grassland, forest and clouds](docs/images/late-game.png)
 
 ## Download
 

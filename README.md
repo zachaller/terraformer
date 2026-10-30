@@ -1,4 +1,4 @@
-# Terraformer
+# <img src="docs/images/icon.png" width="48" align="top" alt=""> Terraformer
 
 [![CI](https://github.com/zachaller/terraformer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zachaller/terraformer/actions/workflows/ci.yml)
 
@@ -284,6 +284,7 @@ game/         Ebitengine front end: camera, input, planet shader, views, UI (ui.
 cmd/desktop/  desktop entry point
 mobile/       Android entry point, bound by ebitenmobile
 android/      thin Android project (one Activity hosting the game view)
+cmd/icon/     draws the app icon for every platform (go run ./cmd/icon)
 scripts/      build and packaging scripts
 .github/      CI and release workflows
 docs/         design and technical docs

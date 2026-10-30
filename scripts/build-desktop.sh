@@ -24,7 +24,8 @@ for arch in arm64 amd64; do
     -o "$work/terraformer-$arch" ./cmd/desktop
 done
 app="$work/mac/Terraformer.app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp scripts/Terraformer.icns "$app/Contents/Resources/"
 python3 scripts/lipo.py "$app/Contents/MacOS/terraformer" "$work/terraformer-arm64" "$work/terraformer-amd64"
 chmod +x "$app/Contents/MacOS/terraformer"
 sed "s/@VERSION@/$version/g" scripts/Info.plist > "$app/Contents/Info.plist"

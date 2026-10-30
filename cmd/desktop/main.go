@@ -2,8 +2,12 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
 	"flag"
 	"fmt"
+	"image"
+	"image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +16,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/zachaller/terraformer/game"
 )
+
+// icon is the window icon (drawn by cmd/icon). macOS uses the app bundle's
+// icon instead.
+//
+//go:embed icon.png
+var icon []byte
 
 func main() {
 	var opts game.Options
@@ -55,6 +65,9 @@ func main() {
 		log.Fatal(err)
 	}
 	ebiten.SetWindowTitle("Terraformer")
+	if img, err := png.Decode(bytes.NewReader(icon)); err == nil {
+		ebiten.SetWindowIcon([]image.Image{img})
+	}
 	ebiten.SetWindowSize(winW, winH)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	if err := ebiten.RunGame(g); err != nil {

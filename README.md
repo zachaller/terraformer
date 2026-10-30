@@ -214,20 +214,22 @@ GitHub Actions does it (`.github/workflows/`):
 - **CI** runs on every push and pull request: gofmt, `go vet`, all the
   tests (including the playthrough), and the desktop and Android builds,
   kept as downloadable artifacts for a week.
-- **Release** runs when a version tag is pushed. It runs the same build,
-  then publishes a GitHub release with the Mac, Windows and Linux packages
-  and the Android APK (and AAB), with notes made from the commits since the
-  last release.
+- **Release** publishes a GitHub release with the Mac, Windows and Linux
+  packages and the Android APK (and AAB), with notes made from the commits
+  since the last release. It runs the same build first.
 
 To cut a release, set `versionName` (and bump `versionCode`) in
-`android/app/build.gradle`, commit, then tag that version:
+`android/app/build.gradle` and merge it to `main`. Then either open the
+Actions tab, pick **Release** and press **Run workflow** on `main` (it tags
+the commit `v<versionName>` itself), or push the tag yourself:
 
 ```sh
 git tag v0.14.0 && git push origin v0.14.0
 ```
 
-The tag must match `versionName`. A tag with a hyphen (`v0.15.0-beta1`) is
-published as a pre-release.
+A pushed tag must match `versionName`, and a version that's already been
+released is refused. A version with a hyphen (`0.15.0-beta1`) is published
+as a pre-release.
 
 Android releases are signed with the upload key from these repository
 secrets (Settings → Secrets and variables → Actions). Without them the

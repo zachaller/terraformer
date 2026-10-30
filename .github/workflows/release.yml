@@ -1,33 +1,51 @@
-# Publishes a GitHub release when a version tag is pushed:
+# Publishes a GitHub release, either:
 #
-#   git tag v0.14.0 && git push origin v0.14.0
+# - from the Actions tab: Release → Run workflow (on main). It tags the
+#   current commit with the version in android/app/build.gradle, or
+# - by pushing a version tag: git tag v0.14.0 && git push origin v0.14.0
+#   The tag must match versionName in android/app/build.gradle.
 #
-# The tag must match versionName in android/app/build.gradle. Tags with a
-# hyphen (v0.15.0-beta1) are published as pre-releases.
+# Versions with a hyphen (0.15.0-beta1) are published as pre-releases.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - name: Tag matches the app's version
+      - id: version
+        name: Work out the tag
         run: |
-          version="$(scripts/version.sh)"
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match versionName $version in android/app/build.gradle"
-            exit 1
+          tag="v$(scripts/version.sh)"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME doesn't match versionName in android/app/build.gradle ($tag)"
+              exit 1
+            fi
+          else
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::Run releases from main, not $GITHUB_REF_NAME"
+              exit 1
+            fi
+            if [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+              echo "::error::$tag is already released: bump versionName (and versionCode) in android/app/build.gradle first"
+              exit 1
+            fi
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
     needs: check
@@ -37,7 +55,7 @@ jobs:
     secrets: inherit
 
   publish:
-    needs: build
+    needs: [check, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,9 +65,12 @@ jobs:
           path: dist
           merge-multiple: true
       - run: ls -l dist
+      # Creates the tag on this commit if it doesn't exist yet (Run workflow).
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.check.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.check.outputs.tag, '-') }}
           fail_on_unmatched_files: true

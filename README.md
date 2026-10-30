@@ -7,10 +7,10 @@ shape a barren planet until life takes hold. See
 [docs/tech-stack.md](docs/tech-stack.md) for the design and technical plan.
 
 ![Starting planet](docs/images/globe-prototype.png)
-![After warming: seas and microbes](docs/images/terraformed.png)
-![A small colony: lander, solar, mine, smelter and heater](docs/images/colony.png)
-![Main screen](docs/images/ui-main.png)
-![Inspect panel](docs/images/ui-inspect.png)
+![After warming: the first seas and life](docs/images/terraformed.png)
+![A colony with one of every building, and its pollution](docs/images/colony.png)
+![Main screen: goal card, alert, map views, speed and tools](docs/images/ui-main.png)
+![Inspecting a heater that's short of power](docs/images/ui-inspect.png)
 ![A living planet: seas, grassland and forest](docs/images/late-game.png)
 
 ## Download

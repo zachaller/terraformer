@@ -102,7 +102,8 @@ type Game struct {
 	colonyOpen    bool          // the colony overview is showing
 	settings      settings
 	audio         *audioSys
-	tutorial      int // the walkthrough's current step, or -1 when it's off
+	scape         soundscape // the ambient mix the audio fades towards
+	tutorial      int        // the walkthrough's current step, or -1 when it's off
 	// alertCount and impacts are what the last frame saw, to play sounds
 	// when they change.
 	alertCount, impacts int
@@ -551,7 +552,10 @@ func (g *Game) sound(id soundID) {
 // impacts.
 func (g *Game) updateSound() {
 	p := g.planet
-	g.audio.update(p.Stats().LifeCover, g.settings.Sound)
+	if g.audio != nil && g.ticks%15 == 0 {
+		g.scape = g.soundscape()
+	}
+	g.audio.update(g.scape, g.settings.Sound)
 	if n := len(g.alerts()); n > g.alertCount {
 		g.sound(sndAlert)
 		g.alertCount = n

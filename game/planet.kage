@@ -5,9 +5,10 @@ package main
 // Draws the starfield and the planet as a ray-traced sphere on one screen quad.
 // The planet is a geodesic hex grid (see sim/grid.go). Source image 0 is the
 // tile atlas (see game/palette.go): one block per diamond with a pixel for
-// every lattice point, in three bands: tile colour; building data (red:
+// every lattice point, in four bands: tile colour; building data (red:
 // type + 1, or 0 for none; green: activity 0..1; blue: status, as
-// sim.StatusKind); and the tile's index (red + 256·green).
+// sim.StatusKind); the tile's index (red + 256·green); and relief (red:
+// height, green: standing water).
 //
 // Tile colours are blended smoothly and broken up with noise so the planet
 // looks natural rather than like a ball of hexagons; buildings, selection
@@ -25,6 +26,8 @@ var Time float       // seconds
 var Light vec3       // unit light direction, view space
 var Grid float       // tile grid line strength, 0 to hide
 var GridAt vec3      // planet-space centre of the patch where grid lines show
+var Clouds float     // cloud cover, 0 to 1 (0 outside the surface view)
+var Air float        // how thick the air is, 0 to 1: the halo and twilight glow
 
 // A building being placed: its tile index (-1 means none), type + 1,
 // whether the spot is valid, and the tiles it would heat or pollute (unused
@@ -486,6 +489,43 @@ func building(bt float, p vec2, act float, aa float) vec4 {
 	return o
 }
 
+// glowOf is the light building type bt gives off at tile-local position p
+// while running at act: lamps, furnace windows and hot cores, added after
+// lighting so they shine on the night side too.
+func glowOf(bt float, p vec2, act float) vec3 {
+	if bt == 1 { // lander: the cyan ring and the blinking beacon
+		ring := exp(-pow(length(p)-0.18, 2) / 0.003)
+		blink := step(0.5, fract(Time*0.8))
+		return vec3(0.35, 0.82, 0.96)*ring*0.35 + vec3(1, 0.85, 0.5)*exp(-dot(p-vec2(0.33, 0.33), p-vec2(0.33, 0.33))/0.004)*blink*0.8
+	}
+	if bt == 4 { // smelter: the furnace window
+		q := p - vec2(-0.17, -0.2)
+		return vec3(1, 0.55, 0.2) * exp(-dot(q, q)/0.03) * 0.55 * act
+	}
+	if bt == 5 { // heater: the hot core and its warmth
+		return vec3(1, 0.6, 0.25) * (exp(-dot(p, p)/0.02)*0.6 + exp(-dot(p, p)/0.15)*0.15) * act
+	}
+	if bt == 8 { // greenhouse factory: its lit panel
+		q := p - vec2(-0.05, -0.18)
+		return vec3(0.7, 0.45, 1) * exp(-dot(q, q)/0.03) * 0.3 * act
+	}
+	if bt == 12 { // geothermal: the vent
+		return vec3(1, 0.45, 0.15) * exp(-dot(p, p)/0.025) * 0.6
+	}
+	if bt == 13 { // orbital mirror's focus
+		return vec3(1, 0.9, 0.6) * exp(-dot(p, p)/0.05) * 0.5
+	}
+	if bt == 16 { // biolab: grow lights under the dome
+		return vec3(0.4, 1, 0.55) * exp(-dot(p, p)/0.05) * 0.2 * act
+	}
+	if bt == 18 { // pylon: the insulators
+		a := p - vec2(-0.3, 0.22)
+		b := p - vec2(0.3, 0.22)
+		return vec3(0.35, 0.82, 0.96) * (exp(-dot(a, a)/0.004) + exp(-dot(b, b)/0.004)) * 0.4
+	}
+	return vec3(0)
+}
+
 // badge draws a building's status badge in its tile's top-right corner.
 // Status codes follow sim.StatusKind; the glyph's shape carries the meaning.
 func badge(st float, p vec2, aa float) vec4 {
@@ -539,16 +579,24 @@ func vnoise(p vec3) float {
 	return mix(mix(a, b, u.y), mix(c, e, u.y), u.z)
 }
 
-// smoothColor blends the colours of the three tiles nearest planet
-// direction d, favouring the nearest so each tile's own colour shows.
-func smoothColor(d vec3) vec3 {
-	l := latticeAt(d)
-	w := triWeights(l.yz)
-	w = w * w * w
+// smoothBand blends an atlas band's values for the three tiles around
+// lattice position l (from latticeAt), favouring the nearest so each tile's
+// own value shows (sharp sets how much).
+func smoothBand(l vec3, band float, sharp float) vec4 {
+	w := pow(triWeights(l.yz), vec3(sharp))
 	w /= w.x + w.y + w.z
-	return atlasAt(l.x, triCorner(l.yz, 0), 0).rgb*w.x +
-		atlasAt(l.x, triCorner(l.yz, 1), 0).rgb*w.y +
-		atlasAt(l.x, triCorner(l.yz, 2), 0).rgb*w.z
+	return atlasAt(l.x, triCorner(l.yz, 0), band)*w.x +
+		atlasAt(l.x, triCorner(l.yz, 1), band)*w.y +
+		atlasAt(l.x, triCorner(l.yz, 2), band)*w.z
+}
+
+// cloudsAt is the cloud cover at planet direction c: noise, banded by
+// latitude like a planet's weather, thicker the cloudier the planet.
+func cloudsAt(c vec3) float {
+	// Swirl the noise a little so clouds stream rather than sit in blobs.
+	c += (vec3(vnoise(c*2), vnoise(c*2+11.3), vnoise(c*2+23.7)) - 0.5) * 0.35
+	v := vnoise(c*3)*0.55 + vnoise(c*7)*0.28 + vnoise(c*17)*0.17 + 0.08*cos(c.y*7)
+	return smoothstep(0.62-0.14*Clouds, 0.82-0.1*Clouds, v)
 }
 
 // hash is hash3 for 2D points (the starfield).
@@ -614,14 +662,31 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	q4 := d * tf * 3.1
 	warp := vec3(vnoise(q3), vnoise(q3+vec3(17.3, 5.1, 9.7)), vnoise(q3+vec3(41.7, 23.9, 3.3))) - 0.5
 	warp += (vec3(vnoise(q4+vec3(3.7, 11.1, 29.3)), vnoise(q4+vec3(59.1, 7.3, 13.9)), vnoise(q4+vec3(23.3, 37.7, 5.9))) - 0.5) * 0.45
-	base := smoothColor(normalize(d + warp*TileAngle*1.4))
+	sl := latticeAt(normalize(d + warp*TileAngle*1.4))
+	base := smoothBand(sl, 0, 3).rgb
+	relief := smoothBand(sl, 3, 1)
+	wet := relief.g
 	detail := vnoise(d*tf*2.5)*0.6 + vnoise(d*tf*6)*0.25 + vnoise(d*tf*15)*0.15
 	base *= 0.92 + 0.16*detail
+	// Deep water is darker than the shallows.
+	base *= mix(1, mix(0.55, 1.1, smoothstep(0.1, 0.5, relief.r)), wet)
+
+	// Relief: bend the normal by the slope of the terrain (the tiles'
+	// heights, plus the fine detail), found from how the height changes
+	// between neighbouring pixels. Water stays flat.
+	// Gentler when the tiles are small on screen, where it would look jagged.
+	tilePx := 1.27 * Radius * TileAngle // roughly a tile's size on screen
+	hgt := (relief.r*2 - 1) * 0.9 * TileAngle * (1 - wet) * mix(0.45, 1, smoothstep(10, 24, tilePx))
+	dpx := dfdx(n)
+	dpy := dfdy(n)
+	c1 := cross(dpy, n)
+	c2 := cross(n, dpx)
+	det := dot(dpx, c1)
+	nb := normalize(abs(det)*n - sign(det)*(dfdx(hgt)*c1+dfdy(hgt)*c2))
 
 	// Tile grid lines, only while placing things and only in a small patch
 	// (about two tiles) around the last tapped tile, faded out when tiles
 	// are small on screen.
-	tilePx := 1.27 * Radius * TileAngle // roughly a tile's size on screen
 	lineAmt := 1 - clamp(edgePx, 0, 1)
 	patch := 1 - smoothstep(1.4*TileAngle, 2.6*TileAngle, length(d-GridAt))
 	strength := clamp((tilePx-6)/12, 0, 1) * 0.35 * Grid * patch
@@ -631,6 +696,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// on all three tiles around this point (the corners of its lattice
 	// triangle), not just its own. aa is a pixel's size in tile widths.
 	aa := length(fwidth(d)) / TileAngle * 1.2
+	ndl := dot(n, Light)
+	night := smoothstep(0.08, -0.1, ndl)
+	glow := vec3(0) // light the buildings give off, added after shading
 	for k := 0; k < 3; k++ {
 		cij := triCorner(l.yz, k)
 		own := cij == ij
@@ -643,18 +711,33 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 			lp := tileLocal(d, dm, cij)
 			act := bdata.g
 			st := floor(bdata.b*255 + 0.5)
-			b := building(bt, lp*artScale, act, aa*artScale)
+			ap := lp * artScale
+			b := building(bt, ap, act, aa*artScale)
 			// Stopped buildings fade to grey; short-of-power ones dim a little.
+			running := 1.0
 			if st > 1.5 {
 				grey := dot(b.rgb, vec3(0.3, 0.59, 0.11))
 				b.rgb = mix(b.rgb, vec3(grey), 0.65) * 0.8
+				running = 0
 			} else if st > 0.5 {
 				b.rgb *= 0.85
 			}
 			if tilePx < 10 {
 				// Too small for the design to read: fill the tile instead.
 				b.a = 1
+			} else {
+				// Depth: a shadow cast to the south-east, a lit edge on the
+				// side facing the sun (north-west), and light falling off
+				// across the building.
+				sh := building(bt, ap-vec2(0.06, -0.08), act, aa*artScale*2).a
+				base *= 1 - 0.45*sh*(1-b.a)
+				lit := building(bt, ap+vec2(-0.03, 0.03), act, aa*artScale).a
+				b.rgb *= 1.06 - 0.3*dot(ap, vec2(0.6, -0.6))
+				b.rgb = mix(b.rgb, min(b.rgb*1.5+0.08, vec3(1)), b.a*(1-lit)*0.8)
+				glow += glowOf(bt, ap, act) * running
 			}
+			// At night, a running colony shows as warm lights.
+			glow += vec3(1, 0.72, 0.38) * exp(-dot(lp, lp)/0.03) * night * 0.6 * running * (0.3 + 0.7*act)
 			base = mix(base, b.rgb, b.a)
 			if tilePx >= 18 {
 				bg := badge(st, lp, aa)
@@ -692,10 +775,30 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		base = mix(base, vec3(1, 0.85, 0.2), 0.45+0.25*pulse)
 	}
 
-	diff := max(dot(n, Light), 0)
-	col := base * (0.15 + 0.95*diff)
+	// Sunlight on the relief, and a glint off open water.
+	diff := max(dot(nb, Light), 0)
+	col := base * (0.12 + 0.98*diff)
+	half := normalize(Light + vec3(0, 0, 1))
+	col += vec3(1, 0.97, 0.9) * pow(max(dot(n, half), 0), 90) * wet * 0.45
+
+	// Clouds drift slowly round the planet and shade the ground beneath
+	// them. They fade out as you zoom in, so they never hide the colony.
+	cloudAmt := Clouds * (1 - smoothstep(16, 40, tilePx))
+	if cloudAmt > 0.01 {
+		a := Time * 0.006
+		cd := vec3(d.x*cos(a)-d.z*sin(a), d.y, d.x*sin(a)+d.z*cos(a))
+		lp := Row0*Light.x + Row1*Light.y + Row2*Light.z // the sun, planet space
+		lpr := vec3(lp.x*cos(a)-lp.z*sin(a), lp.y, lp.x*sin(a)+lp.z*cos(a))
+		col *= 1 - 0.4*cloudsAt(cd-lpr*0.02)*cloudAmt
+		cl := cloudsAt(cd)
+		col = mix(col, vec3(0.95, 0.96, 1)*(0.06+1.0*pow(max(ndl, 0), 0.7)), cl*0.8*cloudAmt)
+	}
+
+	// Twilight: thick air glows warm along the line between day and night.
+	col += vec3(0.3, 0.11, 0.03) * exp(-pow((ndl-0.04)/0.12, 2)) * 0.35 * Air
+	col += glow
 
 	rim := pow(1-n.z, 3)
-	col = mix(col, atmo, rim*0.55)
+	col = mix(col, atmo*(0.25+0.85*max(ndl+0.2, 0)), rim*(0.4+0.35*Air))
 	return vec4(col, 1)
 }

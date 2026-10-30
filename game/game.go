@@ -488,8 +488,21 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Area":      area,
 		"AreaAmt":   areaAmt,
 		"AreaTint":  tint,
+		"Clouds":    g.cloudCover(),
+		"Air":       float32(g.planet.Pressure() / (g.planet.Pressure() + 20)),
 	}
 	screen.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 2, 3}, g.shader, op)
+}
+
+// cloudCover is how cloudy the planet looks, 0 to 1: clouds need water
+// vapour and air thick enough to hold it. Only the surface view shows them.
+func (g *Game) cloudCover() float32 {
+	if g.view != viewSurface {
+		return 0
+	}
+	p := g.planet
+	thick := min(max((p.Pressure()-1)/15, 0), 1)
+	return float32(min(p.Humidity()*1.6, 1) * thick)
 }
 
 // highlighted is the tile to highlight: the selected one.

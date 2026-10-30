@@ -215,6 +215,21 @@ const (
 	carbonateK = 1.6e-7
 )
 
+// Photosynthesis is how much tile t's life turns CO₂ into O₂, relative to a
+// tile of full forest.
+func Photosynthesis(t Tile) float64 {
+	photo := 0.2 * t.Life
+	for s := range NumSpecies {
+		photo += t.Bio[s] * SpeciesSpecs[s].Photosynthesis
+	}
+	return photo
+}
+
+// BuildsSoil reports whether life on tile t is building soil there.
+func BuildsSoil(t Tile) bool {
+	return t.Soil < 0.99 && t.Life+t.Bio[Moss]+t.Bio[Grass]+t.Bio[Shrubs]+t.Bio[Forest] > 0.01
+}
+
 // stepBiosphere lets life build soil, turns CO₂ into O₂ by photosynthesis,
 // and lets seas lock CO₂ away as carbonate rock.
 func (p *Planet) stepBiosphere() {
@@ -223,10 +238,7 @@ func (p *Planet) stepBiosphere() {
 		t := &p.Tiles[idx]
 		build := 0.3*t.Life + t.Bio[Moss] + 0.5*t.Bio[Grass] + 0.3*(t.Bio[Shrubs]+t.Bio[Forest])
 		t.Soil += soilRate * build * (1 - t.Soil)
-		photo += 0.2 * t.Life
-		for s := range NumSpecies {
-			photo += t.Bio[s] * SpeciesSpecs[s].Photosynthesis
-		}
+		photo += Photosynthesis(*t)
 		sea += clamp01((t.Water - soilRetention) * 4)
 	}
 	co2 := p.Air.CO2

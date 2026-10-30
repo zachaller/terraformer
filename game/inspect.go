@@ -440,6 +440,49 @@ func (g *Game) inspectActions(u *ui, c sim.Cell, b *sim.Building, x, y, w float6
 	return 48
 }
 
+// lifeNote says what can be seen moving on tile t (the animals the planet
+// shader draws, in the same numbers) and what its life does for the planet.
+func lifeNote(t sim.Tile) string {
+	var seen []string
+	count := func(v, per float64, max int) int { return min(int(math.Ceil(v*per)), max) }
+	if g := t.Bio[sim.Grazers]; g > 0.03 {
+		seen = append(seen, fmt.Sprintf("a herd of %d grazers wanders here", count(g, 5, 5)))
+	}
+	if f := t.Bio[sim.Fish]; f > 0.03 {
+		seen = append(seen, fmt.Sprintf("a school of %d fish swims here", count(f, 6, 6)))
+	}
+	if t.Bio[sim.Forest] > 0.4 {
+		seen = append(seen, "birds circle over the forest")
+	}
+	var does []string
+	switch o := sim.Photosynthesis(t); {
+	case o >= 1.5:
+		does = append(does, "makes a lot of oxygen from CO2")
+	case o >= 0.4:
+		does = append(does, "makes some oxygen from CO2")
+	case o > 0.02:
+		does = append(does, "makes a little oxygen from CO2")
+	}
+	if sim.BuildsSoil(t) {
+		does = append(does, "builds soil")
+	}
+	var out []string
+	if len(seen) > 0 {
+		out = append(out, capitalize(strings.Join(seen, ", and "))+".")
+	}
+	if len(does) > 0 {
+		out = append(out, "Life here "+strings.Join(does, " and ")+".")
+	}
+	return strings.Join(out, " ")
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 // speciesSection shows what lives on the tile and what the next stage of life
 // needs, once microbes are established (or the tile is under water).
 func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
@@ -460,6 +503,9 @@ func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
 		y += u.paragraph("Nothing yet.", x, y, w, 12, colBody)
 	} else {
 		y = u.flowChips(chips, x, x+w, y) + 6
+		if note := lifeNote(t); note != "" {
+			y += u.paragraph(note, x, y, w, 12, colBody) + 4
+		}
 	}
 	y += 8
 

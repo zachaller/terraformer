@@ -240,35 +240,44 @@ func (g *Game) alerts() []alert {
 
 // alertRows draws up to two alerts from y and returns the bottom.
 func (g *Game) alertRows(u *ui, left, right, y float64) float64 {
-	// Only the most urgent alert, in a slim row; the rest are counted, and
-	// the count opens the colony overview.
+	// Only the most urgent alert, as a pill the size of a status chip:
+	// tapping it does its fix. A count of the rest opens the colony overview.
 	as := g.alerts()
 	if len(as) == 0 {
 		return y
 	}
 	a := as[0]
 	y += 6
-	h := 36.0
+	h := float64(chipH)
 	fill, border, fg := color.Color(colCard), color.Color(rgba(0x2B374A)), color.Color(colIcon)
 	if a.warn {
 		fill, border, fg = colAmberBg, colAmberLn, colAmberTx
 	}
-	u.panel(left, y, right-left, h, 12, fill, border)
-	u.icon(a.icon, left+10, y+(h-16)/2, 16, fg)
-	x := right - 4
-	bw := u.textW(a.label, sans, 12, semibold) + 18
-	x -= bw
-	u.fillRound(x, y+4, bw, h-8, 9, withAlpha(rgba(0x000000), 60))
-	u.text(a.label, x+9, y+(h-u.lineH(sans, 12, semibold))/2, sans, 12, semibold, colText)
-	u.area(x, y, bw, h, a.action)
-	if more := len(as) - 1; more > 0 {
-		label := fmt.Sprintf("+%d", more)
-		mw := u.textW(label, mono, 12, semibold) + 16
-		x -= mw + 4
-		u.fillRound(x, y+4, mw, h-8, 9, withAlpha(rgba(0x000000), 60))
-		u.text(label, x+8, y+(h-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, fg)
-		u.area(x, y, mw, h, g.openColony)
+	more := len(as) - 1
+	moreLabel := fmt.Sprintf("+%d", more)
+	moreW := 0.0
+	if more > 0 {
+		moreW = u.textW(moreLabel, mono, 11, semibold) + 14 + 6
 	}
-	u.text(a.text, left+34, y+(h-u.lineH(sans, 12, regular))/2, sans, 12, regular, fg)
+	text := a.text + " · " + a.label
+	maxText := right - left - 10 - 14 - 6 - 10 - moreW
+	for len(text) > 4 && u.textW(text, sans, 12, regular) > maxText {
+		text = text[:len(text)-4] + "…"
+	}
+	w := 10 + 14 + 6 + u.textW(text, sans, 12, regular) + 10
+	u.panel(left, y, w, h, h/2, fill, border)
+	u.icon(a.icon, left+10, y+(h-14)/2, 14, fg)
+	u.text(a.text, left+30, y+(h-u.lineH(sans, 12, regular))/2, sans, 12, regular, fg)
+	if text == a.text+" · "+a.label {
+		lw := u.textW(a.text+" · ", sans, 12, regular)
+		u.text(a.label, left+30+lw, y+(h-u.lineH(sans, 12, semibold))/2, sans, 12, semibold, colText)
+	}
+	u.area(left, y, w, h, a.action)
+	if more > 0 {
+		mx := left + w + 6
+		u.panel(mx, y, moreW-6, h, h/2, colChip, colBorder)
+		u.text(moreLabel, mx+7, y+(h-u.lineH(mono, 11, semibold))/2, mono, 11, semibold, colIcon)
+		u.area(mx, y, moreW-6, h, g.openColony)
+	}
 	return y + h
 }

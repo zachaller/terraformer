@@ -75,7 +75,7 @@ func (g *Game) inspectContent(u *ui, x, y, w float64) float64 {
 		if next, ok := sim.NextSpecies(t); t.Life < 0.5 && !(ok && sim.SpeciesSpecs[next].Aquatic) {
 			y += g.lifeChecklist(u, c, t, x, y, w)
 		} else {
-			y += g.speciesSection(u, t, x, y, w)
+			y += g.speciesSection(u, c, t, x, y, w)
 		}
 	}
 	y += g.tileFacts(u, c, t, x, y, w)
@@ -440,30 +440,75 @@ func (g *Game) inspectActions(u *ui, c sim.Cell, b *sim.Building, x, y, w float6
 	return 48
 }
 
-// lifeNote says what can be seen moving on tile t (the animals the planet
-// shader draws, in the same numbers) and what its life does for the planet.
-func lifeNote(t sim.Tile) string {
+// lifeState is what lifeNote says about a tile: which animals can be seen
+// there (as the planet shader draws them) and how much oxygen its life makes
+// (0 none, 1 a little, 2 some, 3 a lot).
+type lifeState struct {
+	herd, school, birds bool
+	oxygen              int
+	soil                bool
+}
+
+// readLife works out tile t's lifeState. Given the state last shown (prev,
+// if any), each part only changes once its value is clearly past the
+// threshold, so the note doesn't flicker as densities wobble around one.
+func readLife(t sim.Tile, prev *lifeState) lifeState {
+	var p lifeState
+	if prev != nil {
+		p = *prev
+	}
+	// on is a reading that turns on above hi and off below lo.
+	on := func(was bool, v, lo, hi float64) bool {
+		if was && prev != nil {
+			return v > lo
+		}
+		return v > hi
+	}
+	s := lifeState{
+		herd:   on(p.herd, t.Bio[sim.Grazers], 0.02, 0.03),
+		school: on(p.school, t.Bio[sim.Fish], 0.02, 0.03),
+		birds:  on(p.birds, t.Bio[sim.Forest], 0.35, 0.4),
+		soil:   sim.BuildsSoil(t),
+	}
+	o := sim.Photosynthesis(t)
+	levels := []float64{0.02, 0.4, 1.5} // where a little, some and a lot start
+	s.oxygen = p.oxygen
+	if prev == nil {
+		s.oxygen = 0
+		for _, l := range levels {
+			if o > l {
+				s.oxygen++
+			}
+		}
+	} else {
+		for s.oxygen < len(levels) && o > levels[s.oxygen]*1.1 {
+			s.oxygen++
+		}
+		for s.oxygen > 0 && o < levels[s.oxygen-1]*0.9 {
+			s.oxygen--
+		}
+	}
+	return s
+}
+
+// lifeNote says what can be seen moving on a tile and what its life does
+// for the planet.
+func lifeNote(s lifeState) string {
 	var seen []string
-	count := func(v, per float64, max int) int { return min(int(math.Ceil(v*per)), max) }
-	if g := t.Bio[sim.Grazers]; g > 0.03 {
-		seen = append(seen, fmt.Sprintf("a herd of %d grazers wanders here", count(g, 5, 5)))
+	if s.herd {
+		seen = append(seen, "a herd of grazers wanders here")
 	}
-	if f := t.Bio[sim.Fish]; f > 0.03 {
-		seen = append(seen, fmt.Sprintf("a school of %d fish swims here", count(f, 6, 6)))
+	if s.school {
+		seen = append(seen, "a school of fish swims here")
 	}
-	if t.Bio[sim.Forest] > 0.4 {
+	if s.birds {
 		seen = append(seen, "birds circle over the forest")
 	}
 	var does []string
-	switch o := sim.Photosynthesis(t); {
-	case o >= 1.5:
-		does = append(does, "makes a lot of oxygen from CO2")
-	case o >= 0.4:
-		does = append(does, "makes some oxygen from CO2")
-	case o > 0.02:
-		does = append(does, "makes a little oxygen from CO2")
+	if s.oxygen > 0 {
+		does = append(does, "makes "+[]string{"a little", "some", "a lot of"}[s.oxygen-1]+" oxygen from CO2")
 	}
-	if sim.BuildsSoil(t) {
+	if s.soil {
 		does = append(does, "builds soil")
 	}
 	var out []string
@@ -476,6 +521,17 @@ func lifeNote(t sim.Tile) string {
 	return strings.Join(out, " ")
 }
 
+// lifeNoteAt is lifeNote for tile c, keeping what was last shown for the
+// same tile so its parts only change once clearly past their thresholds.
+func (g *Game) lifeNoteAt(c sim.Cell, t sim.Tile) string {
+	var prev *lifeState
+	if g.noteValid && g.noteCell == c {
+		prev = &g.noteState
+	}
+	g.noteState, g.noteCell, g.noteValid = readLife(t, prev), c, true
+	return lifeNote(g.noteState)
+}
+
 func capitalize(s string) string {
 	if s == "" {
 		return s
@@ -485,7 +541,7 @@ func capitalize(s string) string {
 
 // speciesSection shows what lives on the tile and what the next stage of life
 // needs, once microbes are established (or the tile is under water).
-func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
+func (g *Game) speciesSection(u *ui, c sim.Cell, t sim.Tile, x, y, w float64) float64 {
 	y0 := y
 	u.text("LIVING HERE", x, y, sans, 11, semibold, colMuted)
 	y += u.lineH(sans, 11, semibold) + 6
@@ -503,7 +559,7 @@ func (g *Game) speciesSection(u *ui, t sim.Tile, x, y, w float64) float64 {
 		y += u.paragraph("Nothing yet.", x, y, w, 12, colBody)
 	} else {
 		y = u.flowChips(chips, x, x+w, y) + 6
-		if note := lifeNote(t); note != "" {
+		if note := g.lifeNoteAt(c, t); note != "" {
 			y += u.paragraph(note, x, y, w, 12, colBody) + 4
 		}
 	}

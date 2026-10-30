@@ -9,6 +9,8 @@ import (
 // settings are the player's preferences, kept beside the save file.
 type settings struct {
 	Sound bool
+	// ShowFPS adds the frame rate to the status bar.
+	ShowFPS bool
 	// TutorialDone is set once the first-time walkthrough is finished or
 	// skipped.
 	TutorialDone bool

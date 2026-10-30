@@ -282,6 +282,17 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 	if p.Landed() {
 		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, colIcon), numPart(fmt.Sprintf("%.0f", p.Stores()[sim.Metal]), colText)}, fill: colChip, border: colBorder, action: g.openColony})
 	}
+	if g.settings.ShowFPS {
+		fps := ebiten.ActualFPS()
+		col := color.Color(colTeal)
+		switch {
+		case fps < 30:
+			col = colRed
+		case fps < 55:
+			col = colAmber
+		}
+		chips = append(chips, chip{parts: []chipPart{numPart(fmt.Sprintf("%.0f", fps), col), labelPart("fps")}, fill: colChip, border: colBorder})
+	}
 	return u.flowChips(chips, left, right, y)
 }
 
@@ -619,7 +630,7 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 	label := "Start a new planet"
 	col := color.Color(colMuted)
 	if g.ticks < g.confirmNewUntil {
-		label, col = "Tap again to abandon this planet", colRed
+		label, col = "Tap again to abandon", colRed
 	}
 	u.text(label, x, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, col)
 	sound := "Sound: off"
@@ -632,7 +643,18 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		g.settings.Sound = !g.settings.Sound
 		g.saveSettings()
 	})
-	u.area(x, fy, inner-sw-24, 40, func() {
+	fps := "FPS: off"
+	if g.settings.ShowFPS {
+		fps = "FPS: on"
+	}
+	fw := u.textW(fps, sans, 13, semibold)
+	fx := x + inner - sw - 24 - fw
+	u.text(fps, fx, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, colBody)
+	u.area(fx-12, fy, fw+24, 40, func() {
+		g.settings.ShowFPS = !g.settings.ShowFPS
+		g.saveSettings()
+	})
+	u.area(x, fy, fx-x-24, 40, func() {
 		if g.ticks < g.confirmNewUntil {
 			g.confirmNewUntil = 0
 			g.newPlanet()

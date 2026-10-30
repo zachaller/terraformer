@@ -346,9 +346,9 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 
 	pad := 14.0
 	inner := w - 2*pad
-	h := g.goalCardBody(u, left+pad, y+12, inner, goal, prog, ok, n, true) + 24
-	u.panel(left, y, w, h, 16, colChip, colBorder)
-	g.goalCardBody(u, left+pad, y+12, inner, goal, prog, ok, n, false)
+	h := g.goalCardBody(u, left+pad, y+10, inner, goal, prog, ok, n, true) + 20
+	u.panel(left, y, w, h, 14, colChip, colBorder)
+	g.goalCardBody(u, left+pad, y+10, inner, goal, prog, ok, n, false)
 	u.area(left, y, w, h, g.openGoals)
 	u.area(right-48, y, 48, 44, toggle)
 	return y + h
@@ -367,17 +367,24 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 		y += u.paragraph("The planet is alive. Keep terraforming, or start a new planet from the Build menu.", x, y, w, 13, colBody)
 		return y - y0
 	}
-	u.text(fmt.Sprintf("GOAL %d OF %d", n, len(sim.Goals)), x, y, sans, 11, semibold, colMuted)
-	u.icon(iconChevronUp, x+w-20, y-2, 20, colMuted)
-	y += u.lineH(sans, 11, semibold) + 6
-	u.text(goal.Name, x, y, sans, 17, semibold, colText)
-	y += u.lineH(sans, 17, semibold) + 4
-	y += u.paragraph(goal.Hint, x, y, w, 13, colBody)
+	// One line: number, name, progress and the collapse arrow; then the hint,
+	// at most two lines (the goals list has it in full).
+	lh := u.lineH(sans, 15, semibold)
+	num := fmt.Sprintf("%d/%d", n, len(sim.Goals))
+	nw := u.textW(num, mono, 12, semibold)
+	u.text(num, x, y+(lh-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, colMuted)
+	u.text(goal.Name, x+nw+8, y, sans, 15, semibold, colText)
 	if prog > 0 && prog < 1 {
-		y += 6
-		u.fillRound(x, y, w, 6, 3, colTrack)
-		u.fillRound(x, y, math.Max(w*prog, 6), 6, 3, colTeal)
-		y += 6
+		u.textRight(fmt.Sprintf("%.0f%%", prog*100), x+w-26, y+(lh-u.lineH(mono, 12, semibold))/2, mono, 12, semibold, colTeal)
+	}
+	u.icon(iconChevronUp, x+w-20, y, 20, colMuted)
+	y += lh + 2
+	y += u.paragraphMax(goal.Hint, x, y, w, 12, colBody, 2)
+	if prog > 0 && prog < 1 {
+		y += 5
+		u.fillRound(x, y, w, 3, 1.5, colTrack)
+		u.fillRound(x, y, math.Max(w*prog, 3), 3, 1.5, colTeal)
+		y += 3
 	}
 	return y - y0
 }

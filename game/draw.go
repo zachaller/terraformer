@@ -3,6 +3,7 @@ package game
 import (
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -163,6 +164,26 @@ func (u *ui) paragraph(str string, x, y, w float64, size float64, c color.Color)
 	f := u.face(sans, size, regular)
 	lh := size * 1.45
 	lines := wrapWidth(str, f, w*u.s)
+	for i, line := range lines {
+		u.text(line, x, y+float64(i)*lh, sans, size, regular, c)
+	}
+	return float64(len(lines)) * lh
+}
+
+// paragraphMax is paragraph cut to at most maxLines, ending in "…" if
+// anything was left out.
+func (u *ui) paragraphMax(str string, x, y, w float64, size float64, c color.Color, maxLines int) float64 {
+	f := u.face(sans, size, regular)
+	lh := size * 1.45
+	lines := wrapWidth(str, f, w*u.s)
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+		last := strings.Fields(lines[maxLines-1])
+		for len(last) > 1 && u.textW(strings.Join(last, " ")+"…", sans, size, regular) > w {
+			last = last[:len(last)-1]
+		}
+		lines[maxLines-1] = strings.Join(last, " ") + "…"
+	}
 	for i, line := range lines {
 		u.text(line, x, y+float64(i)*lh, sans, size, regular, c)
 	}

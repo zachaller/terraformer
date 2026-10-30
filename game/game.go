@@ -92,10 +92,11 @@ type Game struct {
 	pending *sim.Cell // where the building being placed would go
 
 	goalCollapsed bool
-	goalsOpen     bool         // the goals sheet is showing
-	airOpen       bool         // the atmosphere sheet is showing
-	buildTab      sim.Category // the build menu's category
-	metalHist     []float64    // metal produced so far, sampled each day
+	goalsOpen     bool          // the goals sheet is showing
+	airOpen       bool          // the atmosphere sheet is showing
+	buildTab      sim.Category  // the build menu's category
+	prodHist      []sim.Amounts // resources produced so far, sampled each day
+	colonyOpen    bool          // the colony overview is showing
 
 	// planetTarget is the screen area (x, y, w, h in pixels) the UI leaves
 	// for the planet; planetArea eases towards it so the planet glides
@@ -169,7 +170,7 @@ func (g *Game) setPlanet(p *sim.Planet) {
 		g.tool = toolInspect
 	}
 	g.goalsSeen = p.GoalsDone()
-	g.metalHist = nil
+	g.prodHist = nil
 }
 
 func (g *Game) Update() error {
@@ -229,9 +230,9 @@ func (g *Game) Update() error {
 		g.stepDebt--
 		g.atlasDirty = true
 		if g.planet.Ticks%10 == 0 {
-			g.metalHist = append(g.metalHist, g.planet.Produced()[sim.Metal])
-			if len(g.metalHist) > 6 {
-				g.metalHist = g.metalHist[1:]
+			g.prodHist = append(g.prodHist, g.planet.Produced())
+			if len(g.prodHist) > 6 {
+				g.prodHist = g.prodHist[1:]
 			}
 		}
 	}

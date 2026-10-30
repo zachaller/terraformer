@@ -125,7 +125,8 @@ live there and what's stopping them, and the building's network.
 | Use the current tool on a tile | Tap | Click |
 | Build menu (by category: Power, Industry, Climate, Air, Projects; and new planet) | **Build** | `B`, or `1`–`4` for Solar, Mine, Smelter, Heater |
 | Place a building: tap a tile to preview it (heat or pollution area, effects, warnings), tap another to move it, then **Build here** | Tap, then **Build here** | Click, then `Enter` |
-| Inspect a tile or building | **Inspect** | `I` |
+| Inspect a tile or building | **Inspect**, then tap it | `I` |
+| Colony overview: resources in stock and made per day, power, buildings by type (tap a "held up" count to see one) | **Colony**, or tap the metal, power or resource chips | |
 | Remove a building (half its metal back) | **Remove** | `X` |
 | Map view (Surface / Temperature / Water / Life / Industry) | Right-hand buttons | `V` |
 | Speed (Paused / 1× / 4× / 16×) | Speed pill | `Space` pause, `F` fastest |

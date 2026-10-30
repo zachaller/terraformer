@@ -78,12 +78,15 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 }
 
 // setTool switches tool, closing the menu and cancelling a half-made link.
+// It also clears the selection, so a new tool starts with nothing chosen.
 func (g *Game) setTool(t tool) {
 	g.tool = t
 	g.menuOpen = false
 	g.pending = nil
+	g.selected = nil
 	g.goalsOpen = false
 	g.airOpen = false
+	g.colonyOpen = false
 }
 
 // Layout sizes in dp.
@@ -122,7 +125,7 @@ func (g *Game) runUI(u *ui) {
 		y = g.modeBanner(u, left, narrow, y+gap)
 	} else {
 		y = g.goalCard(u, left, narrow, y+gap)
-		if !g.inspectOpen() && !g.goalsOpen && !g.menuOpen && !g.airOpen {
+		if !g.inspectOpen() && !g.goalsOpen && !g.menuOpen && !g.airOpen && !g.colonyOpen {
 			y = g.alertRows(u, left, narrow, y)
 		}
 	}
@@ -152,6 +155,8 @@ func (g *Game) runUI(u *ui) {
 		beside(g.goalsSheet(u, sl, sheetRight, H))
 	case g.airOpen:
 		beside(g.airSheet(u, sl, sheetRight, H))
+	case g.colonyOpen:
+		beside(g.colonySheet(u, sl, sheetRight, H))
 	case g.inspectOpen():
 		beside(g.inspectSheet(u, sl, sheetRight, H))
 	case placing && g.pending != nil:
@@ -273,6 +278,7 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 		parts:  []chipPart{iconPart(iconMetal, colIcon), numPart(fmt.Sprintf("%.1f", p.Stores()[sim.Metal]), colText), labelPart("metal")},
 		fill:   colChip,
 		border: colBorder,
+		action: g.openColony,
 	}
 	if rate := g.metalRate(); rate > 0.005 {
 		metal.parts = append(metal.parts, chipPart{text: fmt.Sprintf("+%.1f/day", rate), kind: mono, size: 11, weight: semibold, col: colTeal})
@@ -284,6 +290,7 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 			parts:  []chipPart{iconPart(iconBolt, colAmber), numPart(fmt.Sprintf("%.0f / %.0f", n.PowerSupply, n.PowerDemand), colText), labelPart("power")},
 			fill:   colChip,
 			border: colBorder,
+			action: g.openColony,
 		}
 		if n.PowerSatisfaction() < 1 {
 			pc.parts[1].col = colAmber
@@ -296,7 +303,7 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 		col color.Color
 	}{{sim.Water, colBlue}, {sim.FluoriteRes, mineralColor(sim.Fluorite)}, {sim.NitrateRes, mineralColor(sim.Nitrate)}} {
 		if v := p.Stores()[r.res]; v >= 0.05 {
-			chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, r.col), numPart(fmt.Sprintf("%.0f", v), colText), labelPart(lower(r.res.String()))}, fill: colChip, border: colBorder})
+			chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, r.col), numPart(fmt.Sprintf("%.0f", v), colText), labelPart(lower(r.res.String()))}, fill: colChip, border: colBorder, action: g.openColony})
 		}
 	}
 	return u.flowChips(chips, left, right, y+6)
@@ -327,7 +334,7 @@ func (g *Game) goalCard(u *ui, left, right, y float64) float64 {
 	n := p.GoalsDone() + 1
 	toggle := func() { g.goalCollapsed = !g.goalCollapsed }
 
-	if g.goalCollapsed || g.inspectOpen() || g.menuOpen || g.goalsOpen || g.airOpen {
+	if g.goalCollapsed || g.inspectOpen() || g.menuOpen || g.goalsOpen || g.airOpen || g.colonyOpen {
 		h := 44.0
 		u.panel(left, y, w, h, 14, colChip, colBorder)
 		label := "All goals complete"
@@ -404,7 +411,8 @@ func (g *Game) dock(u *ui, left, right, y float64) {
 	}
 	btns := []dockBtn{
 		{iconBuild, buildLabel, g.menuOpen || building, true, func() { g.menuOpen = !g.menuOpen }},
-		{iconInspect, "Inspect", g.tool == toolInspect, false, func() { g.setTool(toolInspect) }},
+		{iconIndustry, "Colony", g.colonyOpen, false, g.openColony},
+		{iconInspect, "Inspect", g.tool == toolInspect && !g.colonyOpen, false, func() { g.setTool(toolInspect) }},
 		{iconRemove, "Remove", g.tool == toolDemolish, false, func() { g.setTool(toolDemolish) }},
 	}
 	w := (right - left - gap*float64(len(btns)-1)) / float64(len(btns))
@@ -810,10 +818,14 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 }
 
 // metalRate is metal produced per in-game day, recently.
-func (g *Game) metalRate() float64 {
-	h := g.metalHist
+func (g *Game) metalRate() float64 { return g.produceRate(sim.Metal) }
+
+// produceRate is how much of resource r was produced per in-game day,
+// recently.
+func (g *Game) produceRate(r sim.Resource) float64 {
+	h := g.prodHist
 	if len(h) < 2 {
 		return 0
 	}
-	return (h[len(h)-1] - h[0]) / float64(len(h)-1)
+	return (h[len(h)-1][r] - h[0][r]) / float64(len(h)-1)
 }

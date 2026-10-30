@@ -541,37 +541,35 @@ func mineralColor(m float) vec3 {
 	return vec3(0.72, 0.88, 0.63)
 }
 
-// outcrop draws a deposit at tile-local position p: a bed of dark rock
-// with crystals of its mineral (colour col) breaking through, more of them
-// the more ore is left. glint makes them sparkle, for picking a spot to mine.
+// outcrop draws a deposit's boulders at tile-local position p: rounded
+// rocks, scattered over the tile, flecked with their mineral (colour col),
+// more of them the more ore is left. The patch's stained ground is drawn
+// with the terrain. glint makes the flecks sparkle, for picking a spot to
+// mine.
 func outcrop(p vec2, seed float, ore float, col vec3, glint float, aa float) vec4 {
 	o := vec4(0)
-	wobble := 0.025 * sin(atan2(p.y, p.x)*5+seed)
-	o = paint(o, vec3(0.3, 0.27, 0.26), cover(sdCircle(p, 0.22)+wobble, aa)*0.45)
-	n := 2 + floor(ore*4)
-	for i := 0; i < 6; i++ {
+	l := normalize(vec3(-0.5, 0.6, 0.7))
+	n := 1 + floor(ore*3+rnd(seed)*1.5)
+	for i := 0; i < 4; i++ {
 		if float(i) >= n {
 			break
 		}
-		k := seed*4.7 + float(i)*1.9
-		base := (vec2(rnd(k), rnd(k+1)) - 0.5) * 0.34
-		ht := 0.09 + 0.07*rnd(k+2)
-		dir := normalize(vec2((rnd(k+3)-0.5)*0.9, 1))
-		perp := vec2(dir.y, -dir.x)
-		mid := base + dir*ht
-		// A shard: a long diamond standing on its base, its shadow first.
-		q := p - mid - vec2(0.02, -0.025)
-		sh := (abs(dot(q, dir))/ht + abs(dot(q, perp))/0.045 - 1) * 0.03
-		o = paint(o, vec3(0.02, 0.02, 0.03), cover(sh, aa)*0.4)
-		q = p - mid
-		side := dot(q, perp)
-		sd := (abs(dot(q, dir))/ht + abs(side)/0.045 - 1) * 0.03
-		face := col * mix(1.3, 0.8, step(0, side))
-		o = paint(o, min(face, vec3(1)), cover(sd, aa))
-		// A sparkle at the tip, now and then.
-		tw := pow(max(sin(Time*(2+rnd(k+4)*2)+k*5), 0), 12) * (0.35 + 0.65*glint)
-		tip := mid + dir*ht*0.8
-		o = paint(o, vec3(1, 0.98, 0.9), cover(sdCircle(p-tip, 0.012+0.02*tw), aa)*tw)
+		k := seed*2.9 + float(i)*4.3
+		c := (vec2(rnd(k), rnd(k+1)) - 0.5) * 0.75
+		r := 0.05 + 0.07*rnd(k+2)
+		o = paint(o, vec3(0.02, 0.02, 0.03), cover(sdCircle(p-c-vec2(0.03, -0.035), r), aa)*0.4)
+		// Shade it as a ball lit by the sun, with a dull shine.
+		q := (p - c) / r
+		nn := vec3(q, sqrt(max(1-dot(q, q), 0)))
+		lit := max(dot(nn, l), 0)
+		rock := mix(vec3(0.4, 0.36, 0.33), col, 0.2) * (0.35 + 0.8*lit)
+		// Flecks of mineral catch the light, and sparkle while placing.
+		f := hash(floor((p-c)*45) + seed)
+		tw := pow(max(sin(Time*3+f*40), 0), 8) * glint
+		fleck := min(col*1.5*(0.7+0.6*lit)+tw, vec3(1))
+		inside := cover(sdCircle(p-c, r), aa)
+		o = paint(o, mix(rock, fleck, step(0.75, f)), inside)
+		o.rgb += vec3(pow(max(dot(reflect(-l, nn), vec3(0, 0, 1)), 0), 20)*0.4) * inside
 	}
 	return o
 }
@@ -803,6 +801,12 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	wet := relief.g
 	detail := vnoise(d*tf*2.5)*0.6 + vnoise(d*tf*6)*0.25 + vnoise(d*tf*15)*0.15
 	base *= 0.92 + 0.16*detail
+	// Mineral deposits stain the ground in their colour, in patches whose
+	// edges wander like the terrain's.
+	if dz := smoothBand(sl, 5, 1); dz.r > 0.01 {
+		mc := mineralColor(floor(atlasAt(sl.x, triCorner(sl.yz, 0), 5).g*255/64 + 0.5))
+		base = mix(base, mix(base*0.62, mc*0.75, 0.35), smoothstep(0, 0.25, dz.r)*0.75)
+	}
 	// Deep water is darker than the shallows.
 	base *= mix(1, mix(0.55, 1.1, smoothstep(0.1, 0.5, relief.r)), wet)
 

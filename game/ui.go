@@ -64,7 +64,7 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.Geothermal:        {"10 power, and warms its tile", "Volcanic tiles only"},
 	sim.Mine:              {"Digs iron, fluorite or nitrate", "1 power · pollutes"},
 	sim.Smelter:           {"Turns 2 ore into 1 metal", "2 power · pollutes"},
-	sim.IceDrill:          {"Melts ice, or pumps sea water, for water", "2 power · on ice or water"},
+	sim.WaterExtractor:    {"Melts ice, or pumps sea water, for water", "2 power · on ice or water"},
 	sim.HeaterMachine:     {"About +30° here, spreading out", "3 power · clean"},
 	sim.DustSpreader:      {"Darkens ice 3 tiles around", "2 power · clean"},
 	sim.GreenhouseFactory: {"Fluorite into super-greenhouse gas", "4 power · pollutes"},
@@ -281,6 +281,17 @@ func (g *Game) statusBar(u *ui, left, right, y float64) float64 {
 	}
 	if p.Landed() {
 		chips = append(chips, chip{parts: []chipPart{iconPart(iconMetal, colIcon), numPart(fmt.Sprintf("%.0f", p.Stores()[sim.Metal]), colText)}, fill: colChip, border: colBorder, action: g.openColony})
+	}
+	if g.settings.ShowFPS {
+		fps := ebiten.ActualFPS()
+		col := color.Color(colTeal)
+		switch {
+		case fps < 30:
+			col = colRed
+		case fps < 55:
+			col = colAmber
+		}
+		chips = append(chips, chip{parts: []chipPart{numPart(fmt.Sprintf("%.0f", fps), col), labelPart("fps")}, fill: colChip, border: colBorder})
 	}
 	return u.flowChips(chips, left, right, y)
 }
@@ -619,7 +630,7 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 	label := "Start a new planet"
 	col := color.Color(colMuted)
 	if g.ticks < g.confirmNewUntil {
-		label, col = "Tap again to abandon this planet", colRed
+		label, col = "Tap again to abandon", colRed
 	}
 	u.text(label, x, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, col)
 	sound := "Sound: off"
@@ -632,7 +643,18 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		g.settings.Sound = !g.settings.Sound
 		g.saveSettings()
 	})
-	u.area(x, fy, inner-sw-24, 40, func() {
+	fps := "FPS: off"
+	if g.settings.ShowFPS {
+		fps = "FPS: on"
+	}
+	fw := u.textW(fps, sans, 13, semibold)
+	fx := x + inner - sw - 24 - fw
+	u.text(fps, fx, fy+(40-u.lineH(sans, 13, semibold))/2, sans, 13, semibold, colBody)
+	u.area(fx-12, fy, fw+24, 40, func() {
+		g.settings.ShowFPS = !g.settings.ShowFPS
+		g.saveSettings()
+	})
+	u.area(x, fy, fx-x-24, 40, func() {
 		if g.ticks < g.confirmNewUntil {
 			g.confirmNewUntil = 0
 			g.newPlanet()
@@ -648,8 +670,8 @@ func placeHint(bt sim.BuildingType) string {
 	switch sim.Specs[bt].Site {
 	case sim.DepositSite:
 		return "Tap a deposit to mine it (they show in the Industry view: gold iron, purple fluorite, pale green nitrate)"
-	case sim.IceSite:
-		return "Tap an icy tile, or a sea or lake, to drill it for water"
+	case sim.WaterSite:
+		return "Tap an icy tile, or a sea or lake, to extract its water"
 	case sim.VolcanicSite:
 		return "Tap a volcanic tile (red in the Industry view)"
 	case sim.RemoteSite:
@@ -731,7 +753,7 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 		}
 		ring(5.8, 2.6, rgba(0xE2553A))
 		u.circle(cx, cy, 2.9*k, rgba(0xFFD36B))
-	case sim.IceDrill:
+	case sim.WaterExtractor:
 		u.circle(cx, cy+3*k, 9*k, rgba(0x9EBCDB))
 		u.circle(cx, cy+3*k, 7*k, rgba(0x4D6B8F))
 		line(-4, 6, 0, -10, 1.3, colIcon)

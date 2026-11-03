@@ -103,7 +103,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "A breath of oxygen",
-		Hint: "Oxygen forms an ozone layer that shields land plants from ultraviolet light. Electrolysers split water (from Ice drills) into it; plankton and moss make it too. Reach 0.6 kPa of oxygen",
+		Hint: "Oxygen forms an ozone layer that shields land plants from ultraviolet light. Electrolysers split water (from Water extractors) into it; plankton and moss make it too. Reach 0.6 kPa of oxygen",
 		Progress: func(p *Planet) float64 {
 			return p.Air.O2 / 0.6
 		},
@@ -152,7 +152,7 @@ var Goals = []Goal{
 	},
 	{
 		Name: "Oxygen-rich",
-		Hint: "Plants turn CO2 into oxygen: spread them, forest most of all, and keep the planet warm with greenhouse gases as CO2 falls. Electrolysers speed it up, fed by Ice drills on ice or, once it's melted, on seas. Reach 10 kPa of oxygen",
+		Hint: "Plants turn CO2 into oxygen: spread them, forest most of all, and keep the planet warm with greenhouse gases as CO2 falls. Electrolysers speed it up, fed by Water extractors on ice or, once it's melted, on seas. Reach 10 kPa of oxygen",
 		Progress: func(p *Planet) float64 {
 			return p.Air.O2 / 10
 		},

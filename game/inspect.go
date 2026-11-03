@@ -178,12 +178,12 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 		msg = fmt.Sprintf("Waiting for %s. Connect it to the colony, whose stores supply it: within 4 tiles of the lander or a connected pylon.", lower(st.Resource.String()))
 		fix, action = pylonFix, addPylon
 		if st.Resource == sim.Water && p.Stores()[sim.Water] < 0.5 {
-			// The colony has no water at all: it needs a drill, not a link.
-			msg = "Waiting for water, and the colony has none. Ice drills supply it: build one on ice, or once the ice has melted, on a sea or lake."
-			fix = fmt.Sprintf("Build an Ice drill · %.0f metal", sim.Specs[sim.IceDrill].Cost)
+			// The colony has no water at all: it needs an extractor, not a link.
+			msg = "Waiting for water, and the colony has none. Water extractors supply it: build one on ice, or once the ice has melted, on a sea or lake."
+			fix = fmt.Sprintf("Build a Water extractor · %.0f metal", sim.Specs[sim.WaterExtractor].Cost)
 			action = func() {
-				g.setTool(buildTool(sim.IceDrill))
-				g.showMessage("Tap an icy tile, or a sea or lake, near a hub to place the drill", msgInfo)
+				g.setTool(buildTool(sim.WaterExtractor))
+				g.showMessage("Tap an icy tile, or a sea or lake, near a hub to place the extractor", msgInfo)
 			}
 		}
 	case sim.StatusOutputFull:
@@ -197,8 +197,8 @@ func (g *Game) diagnosis(u *ui, b *sim.Building, x, y, w float64) float64 {
 		fill, border, fg = colCard, rgba(0x2B374A), colBody
 	case sim.StatusDepleted:
 		msg = "This deposit is empty. Remove the mine and build a new one on another deposit (Industry view)."
-		if spec.Site == sim.IceSite {
-			msg = "The ice and water here are gone. Remove the drill and build it on ice, or on a sea or lake."
+		if spec.Site == sim.WaterSite {
+			msg = "The ice and water here are gone. Remove the extractor and build it on ice, or on a sea or lake."
 		}
 		fix = fmt.Sprintf("Remove · +%.0f metal", spec.Cost/2)
 		action = func() {
@@ -317,7 +317,7 @@ func runningMessage(p *sim.Planet, b *sim.Building) string {
 		return fmt.Sprintf("Makes %.0f power for its network.", spec.PowerOut)
 	case sim.WindTurbine:
 		return fmt.Sprintf("Makes %.1f of its %.0f power in %s kPa of air.", spec.PowerOut*p.WindFactor(), spec.PowerOut, pressure(p.Pressure()))
-	case sim.IceDrill:
+	case sim.WaterExtractor:
 		if p.Tiles[b.Tile].Ice > 0 {
 			return "Melts ice into water for the colony's stores."
 		}

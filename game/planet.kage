@@ -358,7 +358,7 @@ func building(bt float, p vec2, act float, aa float) vec4 {
 		o = paint(o, mix(vec3(0.75, 0.6, 0.35), vec3(1, 0.83, 0.42), act), cover(sdCircle(p, 0.12), aa))
 		return o
 	}
-	if bt == 6 { // ice drill: frosty pad, ice shards, derrick with a bobbing bit
+	if bt == 6 { // water extractor: frosty pad, ice shards, derrick with a bobbing bit
 		o = paint(o, vec3(0.62, 0.74, 0.86), cover(sdHex(p, 0.38), aa))
 		o = paint(o, vec3(0.3, 0.42, 0.56), cover(sdHex(p, 0.38)+0.04, aa))
 		shards := min(min(sdSeg(p, vec2(-0.3, -0.1), vec2(-0.2, -0.3)), sdSeg(p, vec2(0.28, -0.2), vec2(0.16, -0.32))), sdSeg(p, vec2(0.25, 0.22), vec2(0.32, 0.05)))

@@ -103,7 +103,7 @@ var (
 	ErrAlreadyLanded = errors.New("The lander has already touched down")
 	ErrOccupied      = errors.New("There's already a building here")
 	ErrNoOre         = errors.New("Mines must go on a mineral deposit")
-	ErrNoIce         = errors.New("Ice drills must go on ice, or on a sea or lake to pump its water")
+	ErrNoWater       = errors.New("Water extractors must go on ice, or on a sea or lake to pump its water")
 	ErrNotVolcanic   = errors.New("Geothermal plants must go on a volcanic tile")
 	ErrUnique        = errors.New("You can only have one of those")
 	ErrLander        = errors.New("The lander can't be demolished")
@@ -135,8 +135,8 @@ func (p *Planet) CanBuild(t BuildingType, c Cell) error {
 		return fmt.Errorf("%s unlocks after the goal %q", spec.Name, spec.UnlockedBy)
 	case spec.Site == DepositSite && p.Tiles[idx].Ore <= 0:
 		return ErrNoOre
-	case spec.Site == IceSite && p.Tiles[idx].Ice < 0.05 && p.Tiles[idx].Water < standingWater:
-		return ErrNoIce
+	case spec.Site == WaterSite && p.Tiles[idx].Ice < 0.05 && p.Tiles[idx].Water < standingWater:
+		return ErrNoWater
 	case spec.Site == VolcanicSite && !p.Tiles[idx].Volcanic:
 		return ErrNotVolcanic
 	case spec.Unique && p.count(t) > 0:
@@ -429,14 +429,14 @@ func (p *Planet) powerOut(b *Building) float64 {
 }
 
 // Output is what b produces per step at full rate: its recipe's outputs, or
-// for a mine or drill, what it digs.
+// for a mine or water extractor, what it digs.
 func (p *Planet) Output(b *Building) Amounts {
 	s := b.Spec()
 	out := s.Outputs
 	switch s.Site {
 	case DepositSite:
 		out[p.Tiles[b.Tile].Mineral.Resource()] += s.Extracts
-	case IceSite:
+	case WaterSite:
 		out[Water] += s.Extracts * iceToWater
 	}
 	return out
@@ -470,10 +470,10 @@ func (p *Planet) ringsAround(idx, n int) [][]int {
 	return rings
 }
 
-// DrillWater is how much an ice drill on tile t can still take, as a depth:
+// ExtractableWater is how much a water extractor on tile t can still take, as a depth:
 // its ice, and once that's gone, any standing water above what the ground
-// holds as moisture, so drills keep working after the ice melts into seas.
-func DrillWater(t Tile) float64 {
+// holds as moisture, so extractors keep working after the ice melts into seas.
+func ExtractableWater(t Tile) float64 {
 	return t.Ice + max(t.Water-soilRetention, 0)
 }
 
@@ -509,7 +509,7 @@ func (p *Planet) PatchOre(c Cell) float64 {
 }
 
 // runBuilding operates b for one step, as fast as power, inputs, output
-// space and (for mines and drills) what's left to dig allow.
+// space and (for mines and water extractors) what's left to dig allow.
 func (p *Planet) runBuilding(b *Building, power float64) {
 	s := b.Spec()
 	t := &p.Tiles[b.Tile]
@@ -537,8 +537,8 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 			ore = p.Tiles[src].Ore
 		}
 		f = min(f, ore/s.Extracts)
-	case IceSite:
-		f = min(f, DrillWater(*t)/s.Extracts)
+	case WaterSite:
+		f = min(f, ExtractableWater(*t)/s.Extracts)
 	}
 	if s.Emits.CO2 < 0 {
 		// A scrubber can't take more CO₂ than there is.
@@ -562,7 +562,7 @@ func (p *Planet) runBuilding(b *Building, power float64) {
 		if src >= 0 {
 			p.Tiles[src].Ore = max(p.Tiles[src].Ore-s.Extracts*f, 0)
 		}
-	case IceSite:
+	case WaterSite:
 		// Ice first; once it's gone, pump the standing water.
 		dug := s.Extracts * f
 		fromIce := min(dug, t.Ice)

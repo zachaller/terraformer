@@ -195,9 +195,9 @@ func anyTile(Cell, Tile) bool { return true }
 // act makes one round of decisions.
 func (b *bot) act() {
 	p := b.p
-	// Replace exhausted mines and drills.
+	// Replace exhausted mines and water extractors.
 	for _, bl := range append([]*Building(nil), p.eco.buildings...) {
-		if (bl.Type == Mine && p.Tiles[bl.Tile].Ore == 0) || (bl.Type == IceDrill && p.Tiles[bl.Tile].Ice == 0) {
+		if (bl.Type == Mine && p.Tiles[bl.Tile].Ore == 0) || (bl.Type == WaterExtractor && p.Tiles[bl.Tile].Ice == 0) {
 			_ = p.Demolish(p.Grid.CellAt(bl.Tile))
 		}
 	}
@@ -302,15 +302,15 @@ func (b *bot) act() {
 		}
 	}
 
-	// Oxygen: ice drills feeding electrolysers.
+	// Oxygen: water extractors feeding electrolysers.
 	if p.Unlocked(Electrolyser) && b.done("Super greenhouse") {
 		pairs := 2
 		if b.done("Shield the air") {
 			pairs = 4
 		}
-		if b.count(Electrolyser) < pairs && b.afford(Specs[Electrolyser].Cost+Specs[IceDrill].Cost+5, reserve) {
-			if b.count(IceDrill) <= b.count(Electrolyser) {
-				b.near(IceDrill, 40, func(_ Cell, t Tile) bool { return t.Ice > 0.3 })
+		if b.count(Electrolyser) < pairs && b.afford(Specs[Electrolyser].Cost+Specs[WaterExtractor].Cost+5, reserve) {
+			if b.count(WaterExtractor) <= b.count(Electrolyser) {
+				b.near(WaterExtractor, 40, func(_ Cell, t Tile) bool { return t.Ice > 0.3 })
 			} else {
 				b.near(Electrolyser, 30, anyTile)
 			}

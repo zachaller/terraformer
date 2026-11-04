@@ -14,7 +14,7 @@ import (
 const (
 	// solettaHeat is the warming, °C, the finished Soletta adds at the
 	// equator (60% of it at the poles).
-	solettaHeat = 25.0
+	solettaHeat = 40.0
 	// trialDays is how long the planet must hold on its own.
 	trialDays = 1000
 	// trialLife is the share of the planet that must stay alive.

@@ -217,7 +217,7 @@ const (
 	// life burns back into CO₂ (breathing and decay) when there's oxygen to
 	// burn. It's what keeps a living planet's CO₂ from falling to nothing:
 	// CO₂ settles where photosynthesis and respiration balance.
-	respiration = 0.3
+	respiration = 0.15
 	// volcanoK is the CO₂ (kPa) each volcanic tile breathes out per step,
 	// balancing what the seas lock away as carbonate rock over the long run.
 	volcanoK = 8e-9

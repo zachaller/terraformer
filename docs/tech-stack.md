@@ -265,7 +265,8 @@ grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
 5. ✅ **First playable:** build a small production chain that powers one
    terraforming machine, and watch the planet change and the first life appear.
 6. **Content and polish:** more buildings, biomes, art, audio, UI. Mostly
-   done: 18 buildings, 24 goals, synthesised audio, a first-time
+   done: 20 buildings, 25 goals and a finale (a self-sustaining planet,
+   lift-off and harder planets after), synthesised audio, a first-time
    walkthrough, an app icon (drawn by `cmd/icon`, like the rest of the art,
    in code); still to do: more art.
 7. **Release pipeline:** CI and GitHub Releases are done (`.github/workflows/`:
@@ -275,7 +276,9 @@ grouped at the top of `sim/atmosphere.go`, `sim/step.go`, `sim/life.go` and
 
 ## Open design questions
 
-- Machines as scaffolding: once an ecosystem can sustain itself, can or should
-  the player remove the machines? (A lighter, optional take on Terra Nil's
-  "recycle everything and leave".)
+- ~~Machines as scaffolding~~: answered by the finale. The last goal asks
+  the player to remove every machine once the Soletta and L1 shield can do
+  their work from orbit, and the planet must hold for 1000 days. A carbon
+  cycle (respiration, decay and volcanoes against photosynthesis and
+  carbonate rock) keeps a living planet's air from running down.
 - Development setup: is an Android device and Android Studio available?

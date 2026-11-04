@@ -74,14 +74,28 @@ uninstall the debug one first, which deletes its save.
   the colony already reaches first. A mine works its whole patch (its own
   tile and the same mineral next to it), and when the patch is spent one
   tap moves it to the nearest free deposit.
-- 24 goals that guide you from landing to air people could breathe, shown at
+- 25 goals that guide you from landing to a world that keeps itself alive, shown at
   the top of the screen with a hint and progress (tap the card for the full
   list): Land → Dig for ore → Make metal → Warm the ground → Above the triple
   point → Liquid water → First life → Spread life → Super greenhouse → Thicken
   the air → First moss → Release the caps → Thaw → A breath of oxygen → Seas →
   Nitrogen → Grasslands → Shield the air → Life in the seas → Forests →
-  Oxygen-rich → Grazers → Living world → Breathable air. Completing one offers
-  a Show me button. Expect 5–10 hours.
+  Oxygen-rich → Grazers → Living world → Breathable air → A world that runs
+  itself. Completing one offers a Show me button. Expect 5–10 hours.
+- A finale, Terra Nil-style. A breathable planet still depends on its
+  machines (the super-greenhouse gas fades within years without factories,
+  and the shield needs power), so the last goal is to make it independent:
+  launch the Soletta (a mirror ring that tilts to hold the planet near
+  15°C) and the L1 shield (which keeps the air from space), remove every
+  machine, and let the planet hold, breathable and alive, for 1000 days.
+  The Air sheet's "What keeps it warm" shows which warmth lasts and where
+  the temperature would settle without machines. Then the lander lifts
+  off, a closing card sums up the game, and you can keep playing (land
+  again to build) or start a new planet a level harder: colder, with less
+  ice and sparser deposits.
+- A carbon cycle: plants turn CO₂ into oxygen, life breathes and decays
+  some of it back, seas lock it into rock and volcanoes breathe a little
+  out, so a living planet's air settles instead of running down.
 - Live alerts under the goal card for colony problems (no power, short of
   power, empty mines, starved or blocked buildings), each with a one-tap fix.
 - A designed interface (see the [UX mocks](https://claude.ai/artifact/LMMKh2HSCZaoKDpbrFCqT3)):
@@ -128,6 +142,8 @@ uninstall the debug one first, which deletes its save.
 | Carbon scrubber | 35 | Oxygen-rich | Captures CO₂ from the air and locks it away; 6 power |
 | Biolab | 30 | First life | Life takes hold far faster up to 3 tiles around; 3 power |
 | Comet | 120 | Thaw | Strikes 30 days after it's aimed: water, nitrogen and CO₂, a crater, and destruction 2 tiles around; one at a time |
+| Soletta | 1500 | Breathable air | Launched, not placed: a mirror ring in orbit, built over 200 days, that adds up to 40° of sunlight and tilts to hold the planet near 15°C; not a machine |
+| L1 shield | 1000 | Breathable air | Launched: a magnetic shield in space, built over 150 days, that keeps the air without power; not a machine |
 
 Buildings join networks through hubs: the lander and pylons connect
 buildings within 4 tiles, and hubs within 12 tiles of each other connect,

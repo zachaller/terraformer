@@ -1,0 +1,19 @@
+//kage:unit pixels
+
+package main
+
+// Draws the UI's rounded rectangles and circles, filled or outlined, from
+// their signed distance: each shape is one quad, anti-aliased here rather
+// than in a second pass, so a whole panel's worth of shapes is one batch.
+//
+// srcPos is the pixel's position relative to the shape's centre; custom
+// holds the half width, half height, corner radius and outline width (0 to
+// fill). color is the premultiplied colour.
+func Fragment(dstPos vec4, srcPos vec2, color vec4, custom vec4) vec4 {
+	q := abs(srcPos) - custom.xy + custom.z
+	d := length(max(q, 0)) + min(max(q.x, q.y), 0) - custom.z
+	if custom.w > 0 {
+		return color * clamp(custom.w/2+0.5-abs(d), 0, 1)
+	}
+	return color * clamp(0.5-d, 0, 1)
+}

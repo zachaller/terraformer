@@ -19,6 +19,16 @@ import (
 //go:embed planet.kage
 var planetShaderSrc []byte
 
+//go:embed clouds.kage
+var cloudShaderSrc []byte
+
+//go:embed shapes.kage
+var shapeShaderSrc []byte
+
+// cloudScale is how many screen pixels each pixel of the cloud layer
+// covers, along each side.
+const cloudScale = 4
+
 // lightDir is the sun direction in view space, so the side facing the player
 // is always lit.
 var lightDir = sim.Vec3{X: -0.5, Y: 0.5, Z: 0.75}.Normalize()
@@ -70,14 +80,26 @@ type Game struct {
 	opts   Options
 	planet *sim.Planet
 	shader *ebiten.Shader
+	// cloudShader draws the clouds into clouds, a small image scaled up over
+	// the planet.
+	cloudShader *ebiten.Shader
+	// shapeShader draws the UI's rounded boxes and circles (see shape).
+	shapeShader *ebiten.Shader
+	shapeVerts  []ebiten.Vertex // reused by shape
+	sprites     map[spriteKey]*ebiten.Image
+	clouds      *ebiten.Image
 
 	atlas    *ebiten.Image
 	atlasPix []byte
 	atlasSrc []int32 // tile shown by each atlas colour pixel
 	// heatRings is how much a heater warms its tile and each ring around
 	// it, for placement previews.
-	heatRings  []float64
-	atlasDirty bool
+	heatRings []float64
+	// atlasDirty means the atlas must be refilled before the next frame
+	// (the player changed something); atlasStale that the simulation has
+	// moved on since atlasFilled, the tick it was last filled.
+	atlasDirty, atlasStale bool
+	atlasFilled            int
 
 	cam      camera
 	input    pointerInput
@@ -150,14 +172,24 @@ func New(opts Options) (*Game, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compiling planet shader: %w", err)
 	}
+	cloudShader, err := ebiten.NewShader(cloudShaderSrc)
+	if err != nil {
+		return nil, fmt.Errorf("compiling cloud shader: %w", err)
+	}
+	shapeShader, err := ebiten.NewShader(shapeShaderSrc)
+	if err != nil {
+		return nil, fmt.Errorf("compiling shape shader: %w", err)
+	}
 	p := sim.NewPlanet(opts.GridSize, opts.Seed)
 	g := &Game{
-		opts:     opts,
-		shader:   shader,
-		cam:      newCamera(),
-		speed:    1,
-		tutorial: -1,
-		settings: settings{Sound: true},
+		opts:        opts,
+		shader:      shader,
+		cloudShader: cloudShader,
+		shapeShader: shapeShader,
+		cam:         newCamera(),
+		speed:       1,
+		tutorial:    -1,
+		settings:    settings{Sound: true},
 	}
 	g.setPlanet(p)
 	for v := range numViews {
@@ -266,7 +298,7 @@ func (g *Game) Update() error {
 	for g.stepDebt >= 1 {
 		g.planet.Step()
 		g.stepDebt--
-		g.atlasDirty = true
+		g.atlasStale = true
 		if g.planet.Ticks%10 == 0 {
 			g.prodHist = append(g.prodHist, g.planet.Produced())
 			if len(g.prodHist) > 6 {
@@ -427,12 +459,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.layoutCamera()
-	if g.atlasDirty {
+	// The planet changes slowly, so its own changes are drawn at most 20
+	// times a second; changes the player makes are drawn at once.
+	if g.atlasDirty || g.atlasStale && g.ticks-g.atlasFilled >= 3 {
 		fillAtlas(g.atlasPix, g.atlasSrc, g.planet, g.view)
 		g.atlas.WritePixels(g.atlasPix)
-		g.atlasDirty = false
+		g.atlasDirty, g.atlasStale = false, false
+		g.atlasFilled = g.ticks
 	}
 	g.drawPlanet(screen)
+	g.drawClouds(screen)
 	g.drawOrbits(screen)
 	g.drawReach(screen)
 	g.drawLiftoff(screen)
@@ -513,7 +549,6 @@ func (g *Game) drawPlanet(screen *ebiten.Image) {
 		"Area":      area,
 		"AreaAmt":   areaAmt,
 		"AreaTint":  tint,
-		"Clouds":    g.cloudCover(),
 		"Air":       float32(g.planet.Pressure() / (g.planet.Pressure() + 20)),
 		"Mining":    g.miningOverlay(),
 	}
@@ -527,6 +562,42 @@ func (g *Game) miningOverlay() float32 {
 		return 1
 	}
 	return 0
+}
+
+// drawClouds draws the clouds and their shadows over the planet, worked out
+// at a quarter of the screen's resolution (they're soft, so nothing is
+// lost) and scaled up smoothly. They fade out as you zoom in, so they never
+// hide the colony.
+func (g *Game) drawClouds(screen *ebiten.Image) {
+	cover := g.cloudCover()
+	tilePx := 1.27 * g.cam.radius * g.planet.Grid.TileAngle()
+	amount := 1 - smoothstep(16, 40, tilePx)
+	if cover <= 0 || amount < 0.01 {
+		return
+	}
+	w, h := (g.w+cloudScale-1)/cloudScale, (g.h+cloudScale-1)/cloudScale
+	if g.clouds == nil || g.clouds.Bounds().Dx() != w || g.clouds.Bounds().Dy() != h {
+		g.clouds = ebiten.NewImage(w, h)
+	}
+	g.clouds.Clear()
+	op := &ebiten.DrawRectShaderOptions{}
+	op.Uniforms = map[string]any{
+		"Center": []float32{float32(g.cam.cx), float32(g.cam.cy)},
+		"Radius": float32(g.cam.radius),
+		"Scale":  float32(cloudScale),
+		"Row0":   vec3f(g.cam.rot[0]),
+		"Row1":   vec3f(g.cam.rot[1]),
+		"Row2":   vec3f(g.cam.rot[2]),
+		"Time":   float32(g.ticks) / float32(ebiten.TPS()),
+		"Light":  vec3f(lightDir),
+		"Clouds": cover,
+		"Amount": cover * float32(amount),
+		"Air":    float32(g.planet.Pressure() / (g.planet.Pressure() + 20)),
+	}
+	g.clouds.DrawRectShader(w, h, g.cloudShader, op)
+	dop := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	dop.GeoM.Scale(cloudScale, cloudScale)
+	screen.DrawImage(g.clouds, dop)
 }
 
 // cloudCover is how cloudy the planet looks, 0 to 1: clouds need water

@@ -33,7 +33,8 @@ func (g *Game) drawOrbits(screen *ebiten.Image) {
 	if built := p.OrbitalBuilt(sim.Soletta); p.Launched(sim.Soletta) {
 		const mirrors = 48
 		shown := int(math.Ceil(built * mirrors))
-		dot := float32(math.Max(g.cam.radius*0.018, 1.5))
+		dot := math.Max(g.cam.radius*0.018, 1.5)
+		u := &ui{g: g, dst: screen, s: 1}
 		for i := range shown {
 			a := float64(i) / mirrors * 2 * math.Pi
 			x, y, near := g.solettaPoint(a + float64(g.ticks)*0.0004)
@@ -47,9 +48,9 @@ func (g *Game) drawOrbits(screen *ebiten.Image) {
 			if behind {
 				col = color.RGBA{0x7A, 0x86, 0x98, 0xFF}
 			}
-			vector.FillCircle(screen, float32(x), float32(y), dot, col, true)
+			u.circle(x, y, dot, col)
 			if glint > 0.05 {
-				vector.FillCircle(screen, float32(x), float32(y), dot*(1+2*float32(glint)), withAlpha(color.RGBA{0xFF, 0xF2, 0xC0, 0xFF}, uint8(200*glint)), true)
+				u.circle(x, y, dot*(1+2*glint), withAlpha(color.RGBA{0xFF, 0xF2, 0xC0, 0xFF}, uint8(200*glint)))
 			}
 		}
 	}

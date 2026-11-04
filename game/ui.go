@@ -767,6 +767,13 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 	if !u.drawing() {
 		return
 	}
+	u.sprite(spriteGlyph, int(bt), x, y, size, nil, func(v *ui, x, y float64) {
+		g.drawGlyph(v, bt, x, y, size)
+	})
+}
+
+// drawGlyph draws building type bt with vector paths; see buildingGlyph.
+func (g *Game) drawGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 	k := size / 24
 	cx, cy := x+size/2, y+size/2
 	s := u.s

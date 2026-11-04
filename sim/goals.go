@@ -180,7 +180,7 @@ var Goals = []Goal{
 		},
 	},
 	{
-		Name: finalGoal,
+		Name: FinalGoal,
 		Hint: "The planet still needs your machines to stay warm and keep its air. Launch the Soletta and the L1 shield (Build > Projects) to do their work from orbit, then remove every machine. If the planet stays breathable and alive for 1000 days on its own, it's done",
 		Progress: func(p *Planet) float64 {
 			return p.TrialDays() / trialDays
@@ -234,6 +234,9 @@ func (p *Planet) CurrentGoal() (Goal, float64, bool) {
 func (p *Planet) checkGoals() {
 	for p.goalsDone < len(Goals) && Goals[p.goalsDone].Progress(p) >= 1 {
 		p.goalsDone++
+		if p.goalsDone == len(Goals) {
+			p.wonAt = p.Ticks
+		}
 	}
 }
 

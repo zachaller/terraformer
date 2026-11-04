@@ -106,6 +106,11 @@ type Game struct {
 	settings      settings
 	audio         *audioSys
 	scape         soundscape // the ambient mix the audio fades towards
+	// liftoffAt is the tick the lander lifted off the finished planet (0
+	// before), from where liftoffFrom; endingOpen shows the closing card.
+	liftoffAt   int
+	liftoffFrom sim.Vec3
+	endingOpen  bool
 	// noteCell and noteState are the tile the inspect sheet last described
 	// and what it said (see lifeNoteAt).
 	noteCell  sim.Cell
@@ -270,6 +275,7 @@ func (g *Game) Update() error {
 		}
 	}
 	g.announceGoals()
+	g.updateEnding()
 	g.updateSound()
 	g.advanceTutorial()
 	if g.savingEnabled() {
@@ -427,7 +433,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.atlasDirty = false
 	}
 	g.drawPlanet(screen)
+	g.drawOrbits(screen)
 	g.drawReach(screen)
+	g.drawLiftoff(screen)
 	g.runUI(g.newUI(screen))
 
 	if g.opts.ScreenshotPath != "" && g.ticks >= 60 && !g.done {

@@ -92,16 +92,39 @@ func (g *Game) airContent(u *ui, x, y, w float64) float64 {
 	g.airRow(u, x, y, w, "Super-greenhouse gas", fmt.Sprintf("%.2f Pa", a.PFC), "", colPFC)
 	y += 34
 
-	// Greenhouse warming, by cause.
-	gh := p.Greenhouse()
-	u.text("GREENHOUSE WARMING", x, y, sans, 11, semibold, colMuted)
-	u.textRight("+"+degrees(gh.Total()), x+w, y-2, mono, 13, semibold, colAmber)
+	// What keeps it warm, source by source, and what would last without
+	// machines.
+	warmths := p.Warmths()
+	warm := 0.0
+	for _, wm := range warmths {
+		warm += wm.Degrees
+	}
+	u.text("WHAT KEEPS IT WARM", x, y, sans, 11, semibold, colMuted)
+	u.textRight("+"+degrees(warm), x+w, y-2, mono, 13, semibold, colAmber)
 	y += u.lineH(sans, 11, semibold) + 6
-	for _, r := range []struct {
-		label string
-		v     float64
-	}{{"CO2", gh.CO2}, {"Super-greenhouse gas", gh.PFC}, {"Thicker air", gh.Broadening}, {"Water vapour", gh.Vapour}} {
-		g.airRow(u, x, y, w, r.label, "+"+degrees(r.v), "", colAmber)
+	for _, wm := range warmths {
+		noteCol := color.Color(colMuted)
+		switch {
+		case !wm.Lasting:
+			noteCol = colAmber
+		case wm.Note == "permanent":
+			noteCol = colTeal
+		}
+		u.circle(x+5, y+13, 5, colAmber)
+		u.text(wm.Name, x+18, y+(26-u.lineH(sans, 13, regular))/2, sans, 13, regular, colText)
+		vw := u.textW("+"+degrees(wm.Degrees), mono, 13, semibold)
+		u.textRight("+"+degrees(wm.Degrees), x+w, y+(26-u.lineH(mono, 13, semibold))/2, mono, 13, semibold, colText)
+		u.textRight(wm.Note, x+w-vw-10, y+(26-u.lineH(sans, 11, regular))/2, sans, 11, regular, noteCol)
+		y += 26
+	}
+	if p.Unlocked(sim.Soletta) {
+		est := p.WithoutMachines()
+		col := color.Color(colTeal)
+		if est < 5 {
+			col = colRed
+		}
+		u.text("Without machines, about", x, y+(26-u.lineH(sans, 13, regular))/2, sans, 13, regular, colBody)
+		u.textRight(degrees(est), x+w, y+(26-u.lineH(mono, 13, semibold))/2, mono, 13, semibold, col)
 		y += 26
 	}
 	y += 8
@@ -123,16 +146,17 @@ func (g *Game) airContent(u *ui, x, y, w float64) float64 {
 		{"Ozone layer", fmt.Sprintf("%.0f%%", p.Ozone()*100), colBody},
 		{"Humidity", fmt.Sprintf("%.0f%%", p.Humidity()*100), colBody},
 	}
-	if esc := p.EscapePerDay(); esc > 0 {
-		rows = append(rows, struct {
-			label, val string
-			col        color.Color
-		}{"Lost to space", fmt.Sprintf("%.3f kPa a year", esc*365), colAmber})
-	} else {
-		rows = append(rows, struct {
-			label, val string
-			col        color.Color
-		}{"Lost to space", "None: shielded", colTeal})
+	type row = struct {
+		label, val string
+		col        color.Color
+	}
+	switch kept := p.AirKept(); {
+	case kept == "L1 shield":
+		rows = append(rows, row{"Lost to space", "None: the L1 shield keeps it", colTeal})
+	case kept != "":
+		rows = append(rows, row{"Lost to space", "None while the shield has power", colTeal})
+	default:
+		rows = append(rows, row{"Lost to space", fmt.Sprintf("%.3f kPa a year", p.EscapePerDay()*365), colAmber})
 	}
 	for _, r := range rows {
 		u.text(r.label, x, y+(26-u.lineH(sans, 13, regular))/2, sans, 13, regular, colText)

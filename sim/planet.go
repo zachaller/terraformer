@@ -109,8 +109,11 @@ func (t Tile) Kind() TileKind {
 
 // Planet is a whole world: its grid, every tile, and planet-wide state.
 type Planet struct {
-	Grid  Grid
-	Seed  uint64
+	Grid Grid
+	Seed uint64
+	// Level is how hard the planet is: 0 for the first, one more for each
+	// planet brought to life before it.
+	Level int
 	Tiles []Tile // indexed by Grid.Index
 
 	// Air is the atmosphere's composition.
@@ -156,6 +159,15 @@ type Planet struct {
 	// trialStart is the step (plus one) the final goal's trial began, or 0
 	// while it isn't running.
 	trialStart uint64
+	// built counts buildings built, and wonAt is the step the final goal
+	// was completed (0 before), for the closing stats.
+	built int
+	wonAt uint64
+	// liftedOff is set once the lander has left the finished planet.
+	liftedOff bool
+	// solettaPower is how far the Soletta's mirrors are turned towards the
+	// planet, from 0 to 1.
+	solettaPower float64
 	// impacts counts comets that have struck, for goals.
 	impacts int
 
@@ -186,12 +198,18 @@ const (
 
 // NewPlanet generates a frozen, barren starting planet from seed. The same
 // seed and size always give the same planet.
-func NewPlanet(n int, seed uint64) *Planet {
+func NewPlanet(n int, seed uint64) *Planet { return NewPlanetLevel(n, seed, 0) }
+
+// NewPlanetLevel is NewPlanet at a difficulty level: each level makes the
+// planet colder, with less ice and smaller, sparser deposits.
+func NewPlanetLevel(n int, seed uint64, level int) *Planet {
 	g := Grid{N: n}
 	cells := g.NumCells()
+	level = max(level, 0)
 	p := &Planet{
 		Grid:       g,
 		Seed:       seed,
+		Level:      level,
 		Tiles:      make([]Tile, cells),
 		Air:        startAir,
 		neighbors:  make([][]int32, cells),
@@ -214,8 +232,15 @@ func NewPlanet(n int, seed uint64) *Planet {
 		p.cosLat[idx] = math.Sqrt(1 - d.Y*d.Y)
 
 		h := fbm(seed, d.Scale(2.2), 5)
-		t := Tile{Height: h, Ice: startingIce(seed, d, h), DryIce: startingDryIce(seed, d, h), Adsorbed: 1}
+		t := Tile{Height: h, Ice: startingIce(seed, d, h) * p.levelScale(0.12), DryIce: startingDryIce(seed, d, h), Adsorbed: 1}
 		t.Ore, t.Mineral = startingDeposit(seed, d, h)
+		if t.Ore > 0 && level > 0 {
+			// Sparser deposits: drop some outright, shrink the rest.
+			if fbm(seed^0xD15, d.Scale(9), 2) < -0.6+0.15*float64(level) {
+				t.Ore = 0
+			}
+			t.Ore *= p.levelScale(0.12)
+		}
 		t.Volcanic = h > 0.12 && fbm(seed^0x7A11, d.Scale(5), 3) > 0.48
 		if t.Volcanic {
 			p.volcanoes++
@@ -280,6 +305,12 @@ func startingDryIce(seed uint64, d Vec3, h float64) float64 {
 
 // startingIce places polar caps with a ragged edge, snow on peaks, and a
 // little permafrost everywhere else (most in low basins).
+// levelScale is how much of something a planet has at its level, losing
+// share per level, down to half.
+func (p *Planet) levelScale(share float64) float64 {
+	return max(1-share*float64(p.Level), 0.5)
+}
+
 func startingIce(seed uint64, d Vec3, h float64) float64 {
 	edge := 0.82 - 0.08*fbm(seed^0xC3, d.Scale(4), 3) - 0.15*max(h, 0)
 	switch {

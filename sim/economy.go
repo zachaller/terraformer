@@ -179,6 +179,7 @@ func (p *Planet) Build(t BuildingType, c Cell) (*Building, error) {
 		return nil, err
 	}
 	p.eco.Stores[Metal] -= Specs[t].Cost
+	p.built++
 	return p.place(t, p.Grid.Index(c)), nil
 }
 

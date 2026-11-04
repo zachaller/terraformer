@@ -71,7 +71,7 @@ func (p *Planet) equilibrium(idx int) float64 {
 	s := p.heatShare
 	sun := 70 * ((1-0.5*s)*p.cosLat[idx] + 0.5*s*math.Pi/4)
 	soletta := p.SolettaWarming() * (0.6 + 0.4*p.cosLat[idx])
-	return -85 + sun + soletta + p.greenhouse - 15*max(t.Height, 0) + albedoK*(refAlbedo-Albedo(t))
+	return -85 - 2*float64(p.Level) + sun + soletta + p.greenhouse - 15*max(t.Height, 0) + albedoK*(refAlbedo-Albedo(t))
 }
 
 var terrainAlbedo = [...]float64{Basin: 0.16, Plains: 0.25, Highlands: 0.27, Peaks: 0.3}

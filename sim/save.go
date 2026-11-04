@@ -29,6 +29,11 @@ type savedPlanet struct {
 	// Added later; older saves decode them as empty.
 	Orbitals   []orbital
 	TrialStart uint64
+	Level      int
+	Built      int
+	WonAt      uint64
+	LiftedOff  bool
+	Soletta    float64
 }
 
 type savedBuilding struct {
@@ -54,6 +59,11 @@ func (p *Planet) Save(w io.Writer) error {
 		Produced:   p.eco.Produced,
 		Orbitals:   p.orbitals,
 		TrialStart: p.trialStart,
+		Level:      p.Level,
+		Built:      p.built,
+		WonAt:      p.wonAt,
+		LiftedOff:  p.liftedOff,
+		Soletta:    p.solettaPower,
 	}
 	for _, b := range p.eco.buildings {
 		s.Buildings = append(s.Buildings, savedBuilding{Type: b.Type, Tile: b.Tile, In: b.In, Out: b.Out, Timer: b.Timer})
@@ -81,7 +91,7 @@ func Load(r io.Reader) (*Planet, error) {
 	if s.N <= 0 || len(s.Tiles) != (Grid{N: s.N}).NumCells() {
 		return nil, fmt.Errorf("save has %d tiles for size %d", len(s.Tiles), s.N)
 	}
-	p := NewPlanet(s.N, s.Seed)
+	p := NewPlanetLevel(s.N, s.Seed, s.Level)
 	copy(p.Tiles, s.Tiles)
 	p.Air, p.Vapour, p.impacts = s.Air, s.Vapour, s.Impacts
 	p.updateClimate()
@@ -102,5 +112,6 @@ func Load(r io.Reader) (*Planet, error) {
 		}
 	}
 	p.orbitals, p.trialStart = s.Orbitals, s.TrialStart
+	p.built, p.wonAt, p.liftedOff, p.solettaPower = s.Built, s.WonAt, s.LiftedOff, s.Soletta
 	return p, nil
 }

@@ -147,6 +147,28 @@ func (g *Game) runUI(u *ui) {
 	}
 
 	switch {
+	case g.endingOpen:
+		beside(g.endingCard(u, sl, sheetRight, H))
+	case g.liftoffAt > 0 && g.ticks-g.liftoffAt < liftoffTicks:
+		// The lift-off plays out with nothing in the way.
+	case g.inspectOpen():
+		beside(g.inspectSheet(u, sl, sheetRight, H))
+	case !g.planet.Landed() && g.planet.LiftedOff() && g.tool != toolLand:
+		// The sandbox after the ending: the planet runs itself.
+		h := 56.0
+		u.panel(left, bottom-h, narrow-left, h, 16, colChip, colBorder)
+		u.text("The planet runs itself", left+16, bottom-h/2-u.lineH(sans, 14, semibold)/2, sans, 14, semibold, colText)
+		label := "Land again"
+		bw := u.textW(label, sans, 13, bold) + 28
+		bx := narrow - 10 - bw
+		u.fillRound(bx, bottom-h+10, bw, h-20, 12, colTeal)
+		u.text(label, bx+14, bottom-h/2-u.lineH(sans, 13, bold)/2, sans, 13, bold, rgba(0x06231E))
+		u.area(bx, bottom-h, bw+10, h, func() {
+			g.setTool(toolLand)
+			g.showMessage("Tap a tile to land a new lander", msgInfo)
+		})
+		planetBottom = bottom - h - gap
+		g.toast(u, left, narrow, planetBottom)
 	case !g.planet.Landed():
 		h := 56.0
 		u.panel(left, bottom-h, narrow-left, h, 16, colChip, colBorder)
@@ -163,8 +185,6 @@ func (g *Game) runUI(u *ui) {
 		beside(g.airSheet(u, sl, sheetRight, H))
 	case g.colonyOpen:
 		beside(g.colonySheet(u, sl, sheetRight, H))
-	case g.inspectOpen():
-		beside(g.inspectSheet(u, sl, sheetRight, H))
 	case placing && g.pending != nil:
 		planetBottom = g.placementPanel(u, left, narrow, bottom) - gap
 		g.toast(u, left, narrow, planetBottom)
@@ -358,9 +378,9 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 	defer func() { u.measuring = was }()
 	y0 := y
 	if !ok {
-		u.text("All goals complete", x, y, sans, 17, semibold, colText)
+		u.text("The planet runs itself", x, y, sans, 17, semibold, colText)
 		y += u.lineH(sans, 17, semibold) + 4
-		y += u.paragraph("The planet is alive. Keep terraforming, or start a new planet from the Build menu.", x, y, w, 13, colBody)
+		y += u.paragraph("Every goal is done. Watch it live, land again to build, or start a new planet from the Build menu.", x, y, w, 13, colBody)
 		return y - y0
 	}
 	// One line: number, name, progress and the collapse arrow; then the hint,
@@ -376,6 +396,9 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 	u.icon(iconChevronUp, x+w-20, y, 20, colMuted)
 	y += lh + 2
 	y += u.paragraphMax(goal.Hint, x, y, w, 12, colBody, 2)
+	if goal.Name == sim.FinalGoal {
+		y += g.trialChecklist(u, x, y+6, w) + 6
+	}
 	if prog > 0 && prog < 1 {
 		y += 5
 		u.fillRound(x, y, w, 3, 1.5, colTrack)
@@ -383,6 +406,24 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 		y += 3
 	}
 	return y - y0
+}
+
+// trialChecklist shows the final goal's conditions, ticked or crossed, and
+// how long the planet has held, and returns its height.
+func (g *Game) trialChecklist(u *ui, x, y, w float64) float64 {
+	p := g.planet
+	var chips []chip
+	for _, c := range p.WorldConditions() {
+		icon, col := iconCross, color.Color(colRed)
+		if c.Met {
+			icon, col = iconCheck, colTeal
+		}
+		chips = append(chips, chip{parts: []chipPart{iconPart(icon, col), labelPart(c.Name)}, fill: colCard})
+	}
+	if p.WorldHolds() {
+		chips = append(chips, chip{parts: []chipPart{numPart(fmt.Sprintf("Day %.0f of 1000", p.TrialDays()), colTeal)}, fill: colCard})
+	}
+	return u.flowChips(chips, x, x+w, y) - y
 }
 
 func (g *Game) dock(u *ui, left, right, y float64) {

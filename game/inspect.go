@@ -11,7 +11,7 @@ import (
 
 // inspectOpen reports whether the inspect sheet is showing.
 func (g *Game) inspectOpen() bool {
-	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && !g.goalsOpen && !g.airOpen && !g.colonyOpen && g.planet.Landed()
+	return g.tool == toolInspect && g.selected != nil && !g.menuOpen && !g.goalsOpen && !g.airOpen && !g.colonyOpen && (g.planet.Landed() || g.planet.LiftedOff())
 }
 
 // inspectSheet draws the inspect sheet along the bottom of the screen (from

@@ -75,6 +75,8 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.Biolab:            {"Helps life take hold nearby", "3 power · clean"},
 	sim.CarbonScrubber:    {"Captures CO2 from the air", "6 power · clean"},
 	sim.Comet:             {"Strikes in 30 days: water, nitrogen", "Far from buildings"},
+	sim.Soletta:           {"A ring of mirrors in orbit: warmth for the whole planet, forever", "Orbit · no power"},
+	sim.L1Shield:          {"A magnetic shield in space: keeps the air for good", "Orbit · no power"},
 }
 
 // setTool switches tool, closing the menu and cancelling a half-made link.
@@ -615,11 +617,24 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		if !unlocked {
 			tag, tagCol = "After: "+spec.UnlockedBy, colMuted
 		}
+		if spec.Orbital && p.Launched(bt) {
+			if built := p.OrbitalBuilt(bt); built < 1 {
+				tag, tagCol = fmt.Sprintf("Building in orbit · %.0f%%", built*100), colAmber
+			} else {
+				tag, tagCol = "In orbit and working", colTealTx
+			}
+		} else if spec.Orbital && unlocked && g.confirmLaunch == bt && g.ticks < g.confirmLaunchUntil {
+			tag, tagCol = "Tap again to launch", colAmber
+		}
 		u.paragraph(effect, cx+10, ccy+46, cw-20, 12, bodyCol)
 		u.text(tag, cx+10, ccy+cardH-22, sans, 11, semibold, tagCol)
 		u.area(cx, ccy, cw, cardH, func() {
 			if !unlocked {
 				g.showMessage(fmt.Sprintf("%s unlocks after the goal %q", spec.Name, spec.UnlockedBy), msgInfo)
+				return
+			}
+			if spec.Orbital {
+				g.launch(bt)
 				return
 			}
 			g.setTool(t)
@@ -663,6 +678,31 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		g.confirmNewUntil = g.ticks + 3*ebiten.TPS()
 	})
 	return y
+}
+
+// launch launches orbital project bt, after a second tap to confirm.
+func (g *Game) launch(bt sim.BuildingType) {
+	p := g.planet
+	if p.Launched(bt) {
+		g.showMessage(fmt.Sprintf("The %s is already in orbit", sim.Specs[bt].Name), msgInfo)
+		return
+	}
+	if err := p.CanLaunch(bt); err != nil {
+		g.showMessage(err.Error(), msgWarn)
+		return
+	}
+	if g.confirmLaunch != bt || g.ticks >= g.confirmLaunchUntil {
+		g.confirmLaunch, g.confirmLaunchUntil = bt, g.ticks+3*ebiten.TPS()
+		g.showMessage(fmt.Sprintf("Tap again to launch the %s for %.0f metal", sim.Specs[bt].Name, sim.Specs[bt].Cost), msgInfo)
+		return
+	}
+	g.confirmLaunchUntil = 0
+	if err := p.Launch(bt); err != nil {
+		g.showMessage(err.Error(), msgWarn)
+		return
+	}
+	g.sound(sndBuildProject)
+	g.showMessage(fmt.Sprintf("Launched! The %s takes %d days to build in orbit", sim.Specs[bt].Name, sim.Specs[bt].Countdown/10), msgGood)
 }
 
 // placeHint is the message shown when a build tool is picked.
@@ -828,6 +868,21 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 			u.fillRound(x+(5+float64(i)*5.2)*k, y+7*k, 3.6*k, 11*k, 1, rgba(0x2A313B))
 		}
 		u.circle(cx, cy-9*k, 2.4*k, withAlpha(colCO2, 200))
+	case sim.Soletta:
+		// A ring of mirrors around a small sun.
+		u.circle(cx, cy, 3.5*k, rgba(0xFFD36B))
+		for i := range 8 {
+			a := float64(i) * math.Pi / 4
+			u.circle(cx+9*math.Cos(a)*k, cy+9*math.Sin(a)*k, 1.8*k, rgba(0xDDE6F2))
+		}
+		ring(9, 0.8, rgba(0x8A96AA))
+	case sim.L1Shield:
+		// A satellite between the sun and a planet, with its field.
+		u.circle(cx+7*k, cy, 4*k, rgba(0x4D8F6B))
+		u.circle(cx-9*k, cy, 2.4*k, rgba(0xFFD36B))
+		line(-3, -6, -3, 6, 1, rgba(0x73A6FF))
+		line(-1, -8, -1, 8, 1, rgba(0x73A6FF))
+		u.fillRound(cx-3.4*k, cy-1.6*k, 3.2*k, 3.2*k, 1, rgba(0xDDE6F2))
 	case sim.Biolab:
 		u.circle(cx, cy, 10*k, rgba(0x9AA6B8))
 		u.circle(cx, cy, 8.5*k, rgba(0x294D4D))

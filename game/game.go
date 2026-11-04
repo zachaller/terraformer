@@ -129,6 +129,10 @@ type Game struct {
 	goalsSeen       int // goals completed, as last announced
 	lastSave        int // tick of the last save
 	confirmNewUntil int // a second "New planet" tap before this tick confirms
+	// confirmLaunch is the orbital project a second tap before
+	// confirmLaunchUntil launches.
+	confirmLaunch      sim.BuildingType
+	confirmLaunchUntil int
 
 	w, h  int
 	ticks int

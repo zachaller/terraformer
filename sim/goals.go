@@ -12,7 +12,8 @@ type Goal struct {
 }
 
 // Goals is the milestone sequence: from landing, through thickening the air
-// and first life, to a living world with air people could breathe.
+// and first life, to a living world with air people could breathe, which
+// at last keeps itself alive without machines.
 var Goals = []Goal{
 	{
 		Name:     "Land",
@@ -176,6 +177,13 @@ var Goals = []Goal{
 		Hint: "At least 16 kPa of oxygen, at most 1 kPa of CO2 and 25 kPa in all, with the average above 5C. Plants, seas and Carbon scrubbers draw down CO2; greenhouse factories keep it warm",
 		Progress: func(p *Planet) float64 {
 			return min(p.Air.O2/16, (12-p.Air.CO2)/11, p.Pressure()/25, (p.Stats().AvgTemp-p.startAvgTemp)/(5-p.startAvgTemp))
+		},
+	},
+	{
+		Name: finalGoal,
+		Hint: "The planet still needs your machines to stay warm and keep its air. Launch the Soletta and the L1 shield (Build > Projects) to do their work from orbit, then remove every machine. If the planet stays breathable and alive for 1000 days on its own, it's done",
+		Progress: func(p *Planet) float64 {
+			return p.TrialDays() / trialDays
 		},
 	},
 }

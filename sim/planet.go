@@ -145,9 +145,17 @@ type Planet struct {
 	startAvgTemp float64
 	// startDryIce is the total dry ice at generation.
 	startDryIce float64
-	// photosynthesis and carbonates are the CO₂ (kPa) plants turned into
-	// O₂, and seas locked away, last step.
-	photosynthesis, carbonates float64
+	// photosynthesis, respiration, carbonates and outgassing are the CO₂
+	// (kPa) plants turned into O₂, life burnt back into CO₂, seas locked
+	// away and volcanoes breathed out, last step.
+	photosynthesis, respiration, carbonates, outgassing float64
+	// volcanoes is how many volcanic tiles there are.
+	volcanoes int
+	// orbitals are the projects launched into orbit.
+	orbitals []orbital
+	// trialStart is the step (plus one) the final goal's trial began, or 0
+	// while it isn't running.
+	trialStart uint64
 	// impacts counts comets that have struck, for goals.
 	impacts int
 
@@ -209,6 +217,9 @@ func NewPlanet(n int, seed uint64) *Planet {
 		t := Tile{Height: h, Ice: startingIce(seed, d, h), DryIce: startingDryIce(seed, d, h), Adsorbed: 1}
 		t.Ore, t.Mineral = startingDeposit(seed, d, h)
 		t.Volcanic = h > 0.12 && fbm(seed^0x7A11, d.Scale(5), 3) > 0.48
+		if t.Volcanic {
+			p.volcanoes++
+		}
 		p.Tiles[idx] = t
 		totalDry += t.DryIce
 	}

@@ -127,6 +127,8 @@ func (p *Planet) CanBuild(t BuildingType, c Cell) error {
 	switch {
 	case t == Lander:
 		return ErrAlreadyLanded
+	case spec.Orbital:
+		return fmt.Errorf("%s is launched into orbit, not built on the planet", spec.Name)
 	case !p.Landed():
 		return ErrNotLanded
 	case p.eco.at[idx] != nil:

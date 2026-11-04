@@ -213,6 +213,14 @@ const (
 	// carbonateK is the CO₂ (kPa) one tile of standing water locks into
 	// carbonate rock per step, when CO₂ is plentiful.
 	carbonateK = 1.6e-7
+	// respiration is the share of photosynthesis's full-rate output that
+	// life burns back into CO₂ (breathing and decay) when there's oxygen to
+	// burn. It's what keeps a living planet's CO₂ from falling to nothing:
+	// CO₂ settles where photosynthesis and respiration balance.
+	respiration = 0.3
+	// volcanoK is the CO₂ (kPa) each volcanic tile breathes out per step,
+	// balancing what the seas lock away as carbonate rock over the long run.
+	volcanoK = 8e-9
 )
 
 // Photosynthesis is how much tile t's life turns CO₂ into O₂, relative to a
@@ -230,8 +238,9 @@ func BuildsSoil(t Tile) bool {
 	return t.Soil < 0.99 && t.Life+t.Bio[Moss]+t.Bio[Grass]+t.Bio[Shrubs]+t.Bio[Forest] > 0.01
 }
 
-// stepBiosphere lets life build soil, turns CO₂ into O₂ by photosynthesis,
-// and lets seas lock CO₂ away as carbonate rock.
+// stepBiosphere lets life build soil, turns CO₂ into O₂ by photosynthesis
+// and back by respiration, lets seas lock CO₂ away as carbonate rock, and
+// lets volcanoes breathe a little out.
 func (p *Planet) stepBiosphere() {
 	photo, sea := 0.0, 0.0
 	for idx := range p.Tiles {
@@ -241,12 +250,15 @@ func (p *Planet) stepBiosphere() {
 		photo += Photosynthesis(*t)
 		sea += clamp01((t.Water - soilRetention) * 4)
 	}
-	co2 := p.Air.CO2
+	co2, o2 := p.Air.CO2, p.Air.O2
 	made := photoK * photo * co2 / (co2 + 0.5)
+	burnt := photoK * photo * respiration * o2 / (o2 + 2)
 	locked := carbonateK * sea * co2 / (co2 + 10)
 	made = min(made, co2*0.001)
+	burnt = min(burnt, o2*0.001)
 	locked = min(locked, co2*0.001)
-	p.Air.CO2 -= made + locked
-	p.Air.O2 += made
-	p.photosynthesis, p.carbonates = made, locked
+	outgas := volcanoK * float64(p.volcanoes)
+	p.Air.CO2 += burnt + outgas - made - locked
+	p.Air.O2 += made - burnt
+	p.photosynthesis, p.respiration, p.carbonates, p.outgassing = made, burnt, locked, outgas
 }

@@ -56,19 +56,22 @@ func (p *Planet) Step() {
 	p.stepLife()
 	p.stepSpecies()
 	p.stepBiosphere()
+	p.stepOrbitals()
 	p.Ticks++
 	p.checkGoals()
 }
 
 // equilibrium is the temperature tile idx settles towards without machines:
 // warmest at the equator (less so under thick air, which carries heat
-// towards the poles), warmer with more greenhouse gases, colder up high,
-// and colder where the surface is bright and reflects sunlight away.
+// towards the poles), warmer with more greenhouse gases and under the
+// Soletta's extra light, colder up high, and colder where the surface is
+// bright and reflects sunlight away.
 func (p *Planet) equilibrium(idx int) float64 {
 	t := &p.Tiles[idx]
 	s := p.heatShare
 	sun := 70 * ((1-0.5*s)*p.cosLat[idx] + 0.5*s*math.Pi/4)
-	return -85 + sun + p.greenhouse - 15*max(t.Height, 0) + albedoK*(refAlbedo-Albedo(t))
+	soletta := p.SolettaWarming() * (0.6 + 0.4*p.cosLat[idx])
+	return -85 + sun + soletta + p.greenhouse - 15*max(t.Height, 0) + albedoK*(refAlbedo-Albedo(t))
 }
 
 var terrainAlbedo = [...]float64{Basin: 0.16, Plains: 0.25, Highlands: 0.27, Peaks: 0.3}

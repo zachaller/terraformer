@@ -26,6 +26,9 @@ type savedPlanet struct {
 	Buildings []savedBuilding
 	Stores    Amounts
 	Produced  Amounts
+	// Added later; older saves decode them as empty.
+	Orbitals   []orbital
+	TrialStart uint64
 }
 
 type savedBuilding struct {
@@ -38,17 +41,19 @@ type savedBuilding struct {
 // Save writes the planet to w, gzip-compressed.
 func (p *Planet) Save(w io.Writer) error {
 	s := savedPlanet{
-		Version:   saveVersion,
-		N:         p.Grid.N,
-		Seed:      p.Seed,
-		Tiles:     p.Tiles,
-		Air:       p.Air,
-		Vapour:    p.Vapour,
-		Impacts:   p.impacts,
-		Ticks:     p.Ticks,
-		GoalsDone: p.goalsDone,
-		Stores:    p.eco.Stores,
-		Produced:  p.eco.Produced,
+		Version:    saveVersion,
+		N:          p.Grid.N,
+		Seed:       p.Seed,
+		Tiles:      p.Tiles,
+		Air:        p.Air,
+		Vapour:     p.Vapour,
+		Impacts:    p.impacts,
+		Ticks:      p.Ticks,
+		GoalsDone:  p.goalsDone,
+		Stores:     p.eco.Stores,
+		Produced:   p.eco.Produced,
+		Orbitals:   p.orbitals,
+		TrialStart: p.trialStart,
 	}
 	for _, b := range p.eco.buildings {
 		s.Buildings = append(s.Buildings, savedBuilding{Type: b.Type, Tile: b.Tile, In: b.In, Out: b.Out, Timer: b.Timer})
@@ -91,5 +96,11 @@ func Load(r io.Reader) (*Planet, error) {
 		b := p.place(sb.Type, sb.Tile)
 		b.In, b.Out, b.Timer = sb.In, sb.Out, sb.Timer
 	}
+	for _, o := range s.Orbitals {
+		if o.Type < 0 || o.Type >= NumBuildingTypes || !Specs[o.Type].Orbital {
+			return nil, fmt.Errorf("save has an invalid orbital project: %+v", o)
+		}
+	}
+	p.orbitals, p.trialStart = s.Orbitals, s.TrialStart
 	return p, nil
 }

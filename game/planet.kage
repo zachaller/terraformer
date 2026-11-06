@@ -556,19 +556,22 @@ func outcrop(p vec2, seed float, ore float, col vec3, glint float, aa float) vec
 		k := seed*2.9 + float(i)*4.3
 		c := (vec2(rnd(k), rnd(k+1)) - 0.5) * 0.75
 		r := 0.05 + 0.07*rnd(k+2)
-		o = paint(o, vec3(0.02, 0.02, 0.03), cover(sdCircle(p-c-vec2(0.03, -0.035), r), aa)*0.4)
-		// Shade it as a ball lit by the sun, with a dull shine.
-		q := (p - c) / r
-		nn := vec3(q, sqrt(max(1-dot(q, q), 0)))
-		lit := max(dot(nn, l), 0)
-		rock := mix(vec3(0.4, 0.36, 0.33), col, 0.2) * (0.35 + 0.8*lit)
-		// Flecks of mineral catch the light, and sparkle while placing.
-		f := hash(floor((p-c)*45) + seed)
-		tw := pow(max(sin(Time*3+f*40), 0), 8) * glint
-		fleck := min(col*1.5*(0.7+0.6*lit)+tw, vec3(1))
-		inside := cover(sdCircle(p-c, r), aa)
-		o = paint(o, mix(rock, fleck, step(0.75, f)), inside)
-		o.rgb += vec3(pow(max(dot(reflect(-l, nn), vec3(0, 0, 1)), 0), 20)*0.4) * inside
+		// Only pixels on the boulder or its shadow need it worked out.
+		if length(p-c) <= r+0.05+aa {
+			o = paint(o, vec3(0.02, 0.02, 0.03), cover(sdCircle(p-c-vec2(0.03, -0.035), r), aa)*0.4)
+			// Shade it as a ball lit by the sun, with a dull shine.
+			q := (p - c) / r
+			nn := vec3(q, sqrt(max(1-dot(q, q), 0)))
+			lit := max(dot(nn, l), 0)
+			rock := mix(vec3(0.4, 0.36, 0.33), col, 0.2) * (0.35 + 0.8*lit)
+			// Flecks of mineral catch the light, and sparkle while placing.
+			f := hash(floor((p-c)*45) + seed)
+			tw := pow(max(sin(Time*3+f*40), 0), 8) * glint
+			fleck := min(col*1.5*(0.7+0.6*lit)+tw, vec3(1))
+			inside := cover(sdCircle(p-c, r), aa)
+			o = paint(o, mix(rock, fleck, step(0.75, f)), inside)
+			o.rgb += vec3(pow(max(dot(reflect(-l, nn), vec3(0, 0, 1)), 0), 20)*0.4) * inside
+		}
 	}
 	return o
 }
@@ -852,13 +855,20 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		if tilePx < 10 && !own {
 			continue // too small to see: each tile just shows its own
 		}
+		lp := tileLocal(d, dm, cij)
+		// What a neighbouring tile draws (its building with its shadow,
+		// boulders, animals) reaches only a little past its edge: skip it
+		// where none of that can reach this pixel.
+		if !own && max(abs(lp.x), abs(lp.y)) > 0.7+2*aa {
+			continue
+		}
 		bdata := atlasAt(dm, cij, 1)
 		bt := floor(bdata.r*255 + 0.5)
 		if bt == 0 && tilePx >= 9 {
 			dep := atlasAt(dm, cij, 5)
 			if dep.r > 0 {
 				id := atlasAt(dm, cij, 2)
-				oc := outcrop(tileLocal(d, dm, cij), floor(id.r*255+0.5)+256*floor(id.g*255+0.5), dep.r, mineralColor(floor(dep.g*255/64+0.5)), Mining, aa)
+				oc := outcrop(lp, floor(id.r*255+0.5)+256*floor(id.g*255+0.5), dep.r, mineralColor(floor(dep.g*255/64+0.5)), Mining, aa)
 				base = mix(base, oc.rgb, oc.a*smoothstep(9, 14, tilePx))
 			}
 		}
@@ -867,12 +877,11 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 			if an.r > 0.03 || an.g > 0.03 || an.b > 0.4 {
 				id := atlasAt(dm, cij, 2)
 				cw := atlasAt(dm, cij, 3).g
-				cr := creatures(tileLocal(d, dm, cij), floor(id.r*255+0.5)+256*floor(id.g*255+0.5), an.r, an.g, an.b, cw, aa)
+				cr := creatures(lp, floor(id.r*255+0.5)+256*floor(id.g*255+0.5), an.r, an.g, an.b, cw, aa)
 				base = mix(base, cr.rgb, cr.a*smoothstep(18, 28, tilePx))
 			}
 		}
 		if bt > 0 {
-			lp := tileLocal(d, dm, cij)
 			act := bdata.g
 			st := floor(bdata.b*255 + 0.5)
 			ap := lp * artScale
@@ -893,11 +902,17 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 				// Depth: a shadow cast to the south-east, a lit edge on the
 				// side facing the sun (north-west), and light falling off
 				// across the building.
-				sh := building(bt, ap-vec2(0.06, -0.08), act, aa*artScale*2).a
-				base *= 1 - 0.45*sh*(1-b.a)
-				lit := building(bt, ap+vec2(-0.03, 0.03), act, aa*artScale).a
-				b.rgb *= 1.06 - 0.3*dot(ap, vec2(0.6, -0.6))
-				b.rgb = mix(b.rgb, min(b.rgb*1.5+0.08, vec3(1)), b.a*(1-lit)*0.8)
+				// The shadow only shows outside the building and the lit
+				// edge only on it, so each is worked out only where it shows.
+				if b.a < 1 {
+					sh := building(bt, ap-vec2(0.06, -0.08), act, aa*artScale*2).a
+					base *= 1 - 0.45*sh*(1-b.a)
+				}
+				if b.a > 0 {
+					lit := building(bt, ap+vec2(-0.03, 0.03), act, aa*artScale).a
+					b.rgb *= 1.06 - 0.3*dot(ap, vec2(0.6, -0.6))
+					b.rgb = mix(b.rgb, min(b.rgb*1.5+0.08, vec3(1)), b.a*(1-lit)*0.8)
+				}
 				glow += glowOf(bt, ap, act) * running
 			}
 			// At night, a running colony shows as warm lights.

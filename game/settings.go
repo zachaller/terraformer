@@ -14,6 +14,9 @@ type settings struct {
 	// TutorialDone is set once the first-time walkthrough is finished or
 	// skipped.
 	TutorialDone bool
+	// Level is the difficulty of the next new planet: one more for each
+	// planet brought to life.
+	Level int
 }
 
 func settingsPath() string {

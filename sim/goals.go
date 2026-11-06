@@ -12,7 +12,8 @@ type Goal struct {
 }
 
 // Goals is the milestone sequence: from landing, through thickening the air
-// and first life, to a living world with air people could breathe.
+// and first life, to a living world with air people could breathe, which
+// at last keeps itself alive without machines.
 var Goals = []Goal{
 	{
 		Name:     "Land",
@@ -178,6 +179,13 @@ var Goals = []Goal{
 			return min(p.Air.O2/16, (12-p.Air.CO2)/11, p.Pressure()/25, (p.Stats().AvgTemp-p.startAvgTemp)/(5-p.startAvgTemp))
 		},
 	},
+	{
+		Name: FinalGoal,
+		Hint: "The planet still needs your machines to stay warm and keep its air. Launch the Soletta and the L1 shield (Build > Projects) to do their work from orbit, then remove every machine. If the planet stays breathable and alive for 1000 days on its own, it's done",
+		Progress: func(p *Planet) float64 {
+			return p.TrialDays() / trialDays
+		},
+	},
 }
 
 // GoalIndex is the position of the goal called name in Goals, or -1.
@@ -226,6 +234,9 @@ func (p *Planet) CurrentGoal() (Goal, float64, bool) {
 func (p *Planet) checkGoals() {
 	for p.goalsDone < len(Goals) && Goals[p.goalsDone].Progress(p) >= 1 {
 		p.goalsDone++
+		if p.goalsDone == len(Goals) {
+			p.wonAt = p.Ticks
+		}
 	}
 }
 

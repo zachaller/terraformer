@@ -93,8 +93,12 @@ func frostPoint(co2, shift float64) float64 {
 }
 
 // MagneticShield reports whether a magnetic shield is running at full
-// power, which stops the air escaping to space.
+// power, or the L1 shield is built, either of which stops the air escaping
+// to space.
 func (p *Planet) MagneticShield() bool {
+	if p.OrbitalBuilt(L1Shield) >= 1 {
+		return true
+	}
 	for _, b := range p.eco.buildings {
 		if b.Spec().Shield && b.Activity >= 0.999 {
 			return true

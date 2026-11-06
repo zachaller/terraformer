@@ -54,6 +54,8 @@ const (
 	Biolab
 	CarbonScrubber
 	Pylon
+	Soletta
+	L1Shield
 	NumBuildingTypes
 )
 
@@ -135,8 +137,12 @@ type BuildingSpec struct {
 	SeedRings int
 	// Shield stops the air escaping to space while it runs at full power.
 	Shield bool
-	// Countdown is how many steps a comet takes to arrive.
+	// Countdown is how many steps a comet takes to arrive, or an orbital
+	// project to build.
 	Countdown int
+	// Orbital projects are launched rather than built on a tile: they work
+	// from space, so they aren't machines on the planet (see Launch).
+	Orbital bool
 
 	// Hubs (the lander and pylons) join networks: they connect every
 	// building within CoverRadius tiles, and other hubs within Reach tiles.
@@ -305,6 +311,24 @@ var Specs = [NumBuildingTypes]BuildingSpec{
 		Site:       RemoteSite,
 		Unique:     true,
 		Countdown:  300,
+	},
+	Soletta: {
+		Name:       "Soletta",
+		Category:   CatProjects,
+		Cost:       1500,
+		UnlockedBy: "Breathable air",
+		Unique:     true,
+		Orbital:    true,
+		Countdown:  2000,
+	},
+	L1Shield: {
+		Name:       "L1 shield",
+		Category:   CatProjects,
+		Cost:       1000,
+		UnlockedBy: "Breathable air",
+		Unique:     true,
+		Orbital:    true,
+		Countdown:  1500,
 	},
 }
 

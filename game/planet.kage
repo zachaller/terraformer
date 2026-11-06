@@ -28,7 +28,6 @@ var Time float       // seconds
 var Light vec3       // unit light direction, view space
 var Grid float       // tile grid line strength, 0 to hide
 var GridAt vec3      // planet-space centre of the patch where grid lines show
-var Clouds float     // cloud cover, 0 to 1 (0 outside the surface view)
 var Air float        // how thick the air is, 0 to 1: the halo and twilight glow
 var Mining float     // 1 while placing a mine: deposits stand out and glint
 
@@ -723,15 +722,6 @@ func smoothBand(l vec3, band float, sharp float) vec4 {
 		atlasAt(l.x, triCorner(l.yz, 2), band)*w.z
 }
 
-// cloudsAt is the cloud cover at planet direction c: noise, banded by
-// latitude like a planet's weather, thicker the cloudier the planet.
-func cloudsAt(c vec3) float {
-	// Swirl the noise a little so clouds stream rather than sit in blobs.
-	c += (vec3(vnoise(c*2), vnoise(c*2+11.3), vnoise(c*2+23.7)) - 0.5) * 0.35
-	v := vnoise(c*3)*0.55 + vnoise(c*7)*0.28 + vnoise(c*17)*0.17 + 0.08*cos(c.y*7)
-	return smoothstep(0.62-0.14*Clouds, 0.82-0.1*Clouds, v)
-}
-
 // hash is hash3 for 2D points (the starfield).
 func hash(p vec2) float {
 	q := fract(vec3(p.x, p.y, p.x) * 0.1031)
@@ -799,7 +789,17 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	base := smoothBand(sl, 0, 3).rgb
 	relief := smoothBand(sl, 3, 1)
 	wet := relief.g
-	detail := vnoise(d*tf*2.5)*0.6 + vnoise(d*tf*6)*0.25 + vnoise(d*tf*15)*0.15
+	// Fine surface texture, in three octaves. An octave finer than a couple
+	// of pixels only shimmers, so it fades out (and isn't worked out at all)
+	// when tiles are small on screen.
+	tilePx := 1.27 * Radius * TileAngle // roughly a tile's size on screen
+	detail := vnoise(d*tf*2.5)*0.6 + 0.25*0.5 + 0.15*0.5
+	if tilePx > 5 {
+		detail += (vnoise(d*tf*6) - 0.5) * 0.25 * smoothstep(5, 8, tilePx)
+	}
+	if tilePx > 12 {
+		detail += (vnoise(d*tf*15) - 0.5) * 0.15 * smoothstep(12, 20, tilePx)
+	}
 	base *= 0.92 + 0.16*detail
 	// Mineral deposits stain the ground in their colour, in patches whose
 	// edges wander like the terrain's.
@@ -813,7 +813,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// Life moving: gusts of wind rolling across grass and forest, and
 	// microbe mats breathing.
 	if relief.b > 0.01 {
-		gust := sin(dot(d, vec3(0.8, 0.3, 0.5))*tf*0.9 - Time*1.3 + vnoise(d*tf*0.6)*5)
+		// The edge warp's noise makes the gust fronts wavy (it's the same
+		// kind of smooth noise, already worked out for this pixel).
+		gust := sin(dot(d, vec3(0.8, 0.3, 0.5))*tf*0.9 - Time*1.3 + (warp.x-warp.z)*5)
 		base *= 1 + 0.09*relief.b*gust*(1-wet)
 	}
 
@@ -821,7 +823,6 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// heights, plus the fine detail), found from how the height changes
 	// between neighbouring pixels. Water stays flat.
 	// Gentler when the tiles are small on screen, where it would look jagged.
-	tilePx := 1.27 * Radius * TileAngle // roughly a tile's size on screen
 	hgt := (relief.r*2 - 1) * 0.9 * TileAngle * (1 - wet) * mix(0.45, 1, smoothstep(10, 24, tilePx))
 	dpx := dfdx(n)
 	dpy := dfdy(n)
@@ -953,18 +954,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	half := normalize(Light + vec3(0, 0, 1))
 	col += vec3(1, 0.97, 0.9) * pow(max(dot(n, half), 0), 90) * wet * 0.45
 
-	// Clouds drift slowly round the planet and shade the ground beneath
-	// them. They fade out as you zoom in, so they never hide the colony.
-	cloudAmt := Clouds * (1 - smoothstep(16, 40, tilePx))
-	if cloudAmt > 0.01 {
-		a := Time * 0.006
-		cd := vec3(d.x*cos(a)-d.z*sin(a), d.y, d.x*sin(a)+d.z*cos(a))
-		lp := Row0*Light.x + Row1*Light.y + Row2*Light.z // the sun, planet space
-		lpr := vec3(lp.x*cos(a)-lp.z*sin(a), lp.y, lp.x*sin(a)+lp.z*cos(a))
-		col *= 1 - 0.4*cloudsAt(cd-lpr*0.02)*cloudAmt
-		cl := cloudsAt(cd)
-		col = mix(col, vec3(0.95, 0.96, 1)*(0.06+1.0*pow(max(ndl, 0), 0.7)), cl*0.8*cloudAmt)
-	}
+	// (Clouds are drawn over this by clouds.kage.)
 
 	// Twilight: thick air glows warm along the line between day and night.
 	col += vec3(0.3, 0.11, 0.03) * exp(-pow((ndl-0.04)/0.12, 2)) * 0.35 * Air

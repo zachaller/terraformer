@@ -195,6 +195,22 @@ func anyTile(Cell, Tile) bool { return true }
 // act makes one round of decisions.
 func (b *bot) act() {
 	p := b.p
+	// The finale: launch the orbital projects as soon as they're
+	// unlocked; once the air is breathable and they're built, remove every
+	// machine and leave the planet to itself.
+	for _, t := range []BuildingType{Soletta, L1Shield} {
+		if p.CanLaunch(t) == nil && b.afford(Specs[t].Cost, 0) {
+			p.Launch(t)
+		}
+	}
+	if b.done("Breathable air") && p.OrbitalBuilt(Soletta) >= 1 && p.OrbitalBuilt(L1Shield) >= 1 {
+		for _, bl := range append([]*Building(nil), p.eco.buildings...) {
+			if bl.Type != Lander {
+				_ = p.Demolish(p.Grid.CellAt(bl.Tile))
+			}
+		}
+		return
+	}
 	// Replace exhausted mines and water extractors.
 	for _, bl := range append([]*Building(nil), p.eco.buildings...) {
 		if (bl.Type == Mine && p.Tiles[bl.Tile].Ore == 0) || (bl.Type == WaterExtractor && p.Tiles[bl.Tile].Ice == 0) {
@@ -387,7 +403,7 @@ func TestPlaythrough(t *testing.T) {
 		}
 		if testing.Verbose() && step%5000 == 0 {
 			st := p.Stats()
-			t.Logf("  trace day %5d: %5.1f kPa (CO2 %5.1f N2 %4.1f O2 %5.2f PFC %4.2f) avg %6.1fC caps %3.0f%% water %5.0f sea %4.1f%% life %5.1f%% bldg %3d (fac %d scr %d) metal %4.0f goal %q",
+			t.Logf("  trace day %5d: %5.1f kPa (CO2 %5.2f N2 %4.1f O2 %5.2f PFC %4.2f) avg %6.1fC caps %3.0f%% water %5.0f sea %4.1f%% life %5.1f%% bldg %3d (fac %d scr %d) metal %4.0f goal %q",
 				p.Ticks/10, p.Pressure(), p.Air.CO2, p.Air.N2, p.Air.O2, p.Air.PFC, st.AvgTemp, st.DryIce/p.startDryIce*100, st.Water, st.SeaCover*100, st.LifeCover*100, len(p.eco.buildings), b.count(GreenhouseFactory), b.count(CarbonScrubber), b.metal(), p.GoalSummary())
 		}
 		before := p.GoalsDone()

@@ -78,39 +78,50 @@ func (u *ui) area(x, y, w, h float64, action func()) {
 	}
 }
 
-func (u *ui) roundRectPath(x, y, w, h, r float64) *vector.Path {
-	s := u.s
-	x, y, w, h, r = x*s, y*s, w*s, h*s, math.Min(r*s, math.Min(w, h)/2)
-	var p vector.Path
-	p.MoveTo(f32(x+r), f32(y))
-	p.LineTo(f32(x+w-r), f32(y))
-	p.Arc(f32(x+w-r), f32(y+r), f32(r), -math.Pi/2, 0, vector.Clockwise)
-	p.LineTo(f32(x+w), f32(y+h-r))
-	p.Arc(f32(x+w-r), f32(y+h-r), f32(r), 0, math.Pi/2, vector.Clockwise)
-	p.LineTo(f32(x+r), f32(y+h))
-	p.Arc(f32(x+r), f32(y+h-r), f32(r), math.Pi/2, math.Pi, vector.Clockwise)
-	p.LineTo(f32(x), f32(y+r))
-	p.Arc(f32(x+r), f32(y+r), f32(r), math.Pi, 3*math.Pi/2, vector.Clockwise)
-	p.Close()
-	return &p
+// shape draws a rounded rectangle at (x, y), w×h screen pixels with corner
+// radius r, filled, or outlined width wide if width > 0, with the shape
+// shader: one quad, so consecutive shapes draw as one batch.
+func (u *ui) shape(x, y, w, h, r, width float64, c color.Color) {
+	cr, cg, cb, ca := c.RGBA()
+	if ca == 0 || w <= 0 || h <= 0 {
+		return
+	}
+	hw, hh := w/2, h/2
+	r = math.Min(r, math.Min(hw, hh))
+	cx, cy := x+hw, y+hh
+	pad := 1 + width/2 // room for the anti-aliased edge and outline
+	cust := [4]float32{f32(hw), f32(hh), f32(r), f32(width)}
+	v := u.g.shapeVerts[:0]
+	for _, k := range [4][2]float64{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
+		lx, ly := k[0]*(hw+pad), k[1]*(hh+pad)
+		v = append(v, ebiten.Vertex{
+			DstX: f32(cx + lx), DstY: f32(cy + ly),
+			SrcX: f32(lx), SrcY: f32(ly),
+			ColorR: float32(cr) / 0xffff, ColorG: float32(cg) / 0xffff,
+			ColorB: float32(cb) / 0xffff, ColorA: float32(ca) / 0xffff,
+			Custom0: cust[0], Custom1: cust[1], Custom2: cust[2], Custom3: cust[3],
+		})
+	}
+	u.g.shapeVerts = v
+	u.dst.DrawTrianglesShader(v, shapeIndices, u.g.shapeShader, nil)
 }
+
+var shapeIndices = []uint16{0, 1, 2, 1, 3, 2}
 
 func (u *ui) fillRound(x, y, w, h, r float64, c color.Color) {
 	if !u.drawing() {
 		return
 	}
-	op := &vector.DrawPathOptions{AntiAlias: true}
-	op.ColorScale.ScaleWithColor(c)
-	vector.FillPath(u.dst, u.roundRectPath(x, y, w, h, r), nil, op)
+	s := u.s
+	u.shape(x*s, y*s, w*s, h*s, r*s, 0, c)
 }
 
 func (u *ui) strokeRound(x, y, w, h, r, width float64, c color.Color) {
 	if !u.drawing() {
 		return
 	}
-	op := &vector.DrawPathOptions{AntiAlias: true}
-	op.ColorScale.ScaleWithColor(c)
-	vector.StrokePath(u.dst, u.roundRectPath(x, y, w, h, r), &vector.StrokeOptions{Width: f32(width * u.s)}, op)
+	s := u.s
+	u.shape(x*s, y*s, w*s, h*s, r*s, width*s, c)
 }
 
 // panel draws a rounded box with a border and blocks taps on it.
@@ -124,7 +135,8 @@ func (u *ui) panel(x, y, w, h, r float64, fill, border color.Color) {
 
 func (u *ui) circle(cx, cy, r float64, c color.Color) {
 	if u.drawing() {
-		vector.FillCircle(u.dst, f32(cx*u.s), f32(cy*u.s), f32(r*u.s), c, true)
+		s := u.s
+		u.shape((cx-r)*s, (cy-r)*s, 2*r*s, 2*r*s, r*s, 0, c)
 	}
 }
 
@@ -221,6 +233,64 @@ func (u *ui) icon(name iconName, x, y, size float64, c color.Color) {
 	if !u.drawing() {
 		return
 	}
+	u.sprite(spriteIcon, int(name), x, y, size, c, func(v *ui, x, y float64) {
+		v.drawIcon(name, x, y, size, color.White)
+	})
+}
+
+// Kinds of sprite.
+const (
+	spriteIcon = iota
+	spriteGlyph
+)
+
+type spriteKey struct {
+	kind, id int
+	size     float64 // screen pixels
+	fx, fy   uint8   // position within the pixel, in quarters
+}
+
+// sprite draws a size×size dp picture at (x, y) from a cache of images,
+// drawing it with draw (at the given position, in dp) the first time it's
+// needed at this size and sub-pixel position. Pictures drawn in white can
+// be tinted by c; nil leaves them as drawn. Vector paths are costly to fill
+// every frame, and a cached image draws in the same batch as its neighbours.
+func (u *ui) sprite(kind, id int, x, y, size float64, c color.Color, draw func(v *ui, x, y float64)) {
+	X, Y := x*u.s, y*u.s
+	ix, iy := math.Floor(X), math.Floor(Y)
+	fx, fy := math.Round((X-ix)*4), math.Round((Y-iy)*4)
+	key := spriteKey{kind, id, size * u.s, uint8(fx), uint8(fy)}
+	pad := math.Ceil(size*u.s*0.25) + 2 // strokes and edges can stray outside the box
+	g := u.g
+	img := g.sprites[key]
+	if img == nil {
+		if len(g.sprites) >= 512 {
+			for _, im := range g.sprites {
+				im.Deallocate()
+			}
+			clear(g.sprites)
+		}
+		if g.sprites == nil {
+			g.sprites = map[spriteKey]*ebiten.Image{}
+		}
+		n := int(math.Ceil(size*u.s + 2*pad + 1))
+		img = ebiten.NewImage(n, n)
+		v := *u
+		v.dst = img
+		v.tapping = false
+		draw(&v, (pad+fx/4)/u.s, (pad+fy/4)/u.s)
+		g.sprites[key] = img
+	}
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(ix-pad, iy-pad)
+	if c != nil {
+		op.ColorScale.ScaleWithColor(c)
+	}
+	u.dst.DrawImage(img, op)
+}
+
+// drawIcon draws icon name with vector paths; see icon.
+func (u *ui) drawIcon(name iconName, x, y, size float64, c color.Color) {
 	k := size / 24 * u.s
 	px := func(v float64) float32 { return f32(x*u.s + v*k) }
 	py := func(v float64) float32 { return f32(y*u.s + v*k) }

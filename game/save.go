@@ -115,7 +115,8 @@ func (g *Game) autosave() {
 
 // newPlanet abandons the current planet for a freshly generated one.
 func (g *Game) newPlanet() {
-	g.setPlanet(sim.NewPlanet(g.opts.GridSize, uint64(time.Now().UnixNano())))
+	g.setPlanet(sim.NewPlanetLevel(g.opts.GridSize, uint64(time.Now().UnixNano()), g.settings.Level))
+	g.liftoffAt, g.endingOpen = 0, false
 	g.tool = toolLand
 	if err := os.Remove(savePath()); err != nil && !errors.Is(err, fs.ErrNotExist) && g.savingEnabled() {
 		g.showMessage("Couldn't remove the old save: "+err.Error(), msgWarn)

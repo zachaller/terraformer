@@ -75,6 +75,8 @@ var buildInfo = map[sim.BuildingType]struct{ effect, tag string }{
 	sim.Biolab:            {"Helps life take hold nearby", "3 power · clean"},
 	sim.CarbonScrubber:    {"Captures CO2 from the air", "6 power · clean"},
 	sim.Comet:             {"Strikes in 30 days: water, nitrogen", "Far from buildings"},
+	sim.Soletta:           {"A ring of mirrors in orbit: warmth for the whole planet, forever", "Orbit · no power"},
+	sim.L1Shield:          {"A magnetic shield in space: keeps the air for good", "Orbit · no power"},
 }
 
 // setTool switches tool, closing the menu and cancelling a half-made link.
@@ -145,6 +147,28 @@ func (g *Game) runUI(u *ui) {
 	}
 
 	switch {
+	case g.endingOpen:
+		beside(g.endingCard(u, sl, sheetRight, H))
+	case g.liftoffAt > 0 && g.ticks-g.liftoffAt < liftoffTicks:
+		// The lift-off plays out with nothing in the way.
+	case g.inspectOpen():
+		beside(g.inspectSheet(u, sl, sheetRight, H))
+	case !g.planet.Landed() && g.planet.LiftedOff() && g.tool != toolLand:
+		// The sandbox after the ending: the planet runs itself.
+		h := 56.0
+		u.panel(left, bottom-h, narrow-left, h, 16, colChip, colBorder)
+		u.text("The planet runs itself", left+16, bottom-h/2-u.lineH(sans, 14, semibold)/2, sans, 14, semibold, colText)
+		label := "Land again"
+		bw := u.textW(label, sans, 13, bold) + 28
+		bx := narrow - 10 - bw
+		u.fillRound(bx, bottom-h+10, bw, h-20, 12, colTeal)
+		u.text(label, bx+14, bottom-h/2-u.lineH(sans, 13, bold)/2, sans, 13, bold, rgba(0x06231E))
+		u.area(bx, bottom-h, bw+10, h, func() {
+			g.setTool(toolLand)
+			g.showMessage("Tap a tile to land a new lander", msgInfo)
+		})
+		planetBottom = bottom - h - gap
+		g.toast(u, left, narrow, planetBottom)
 	case !g.planet.Landed():
 		h := 56.0
 		u.panel(left, bottom-h, narrow-left, h, 16, colChip, colBorder)
@@ -161,8 +185,6 @@ func (g *Game) runUI(u *ui) {
 		beside(g.airSheet(u, sl, sheetRight, H))
 	case g.colonyOpen:
 		beside(g.colonySheet(u, sl, sheetRight, H))
-	case g.inspectOpen():
-		beside(g.inspectSheet(u, sl, sheetRight, H))
 	case placing && g.pending != nil:
 		planetBottom = g.placementPanel(u, left, narrow, bottom) - gap
 		g.toast(u, left, narrow, planetBottom)
@@ -356,9 +378,9 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 	defer func() { u.measuring = was }()
 	y0 := y
 	if !ok {
-		u.text("All goals complete", x, y, sans, 17, semibold, colText)
+		u.text("The planet runs itself", x, y, sans, 17, semibold, colText)
 		y += u.lineH(sans, 17, semibold) + 4
-		y += u.paragraph("The planet is alive. Keep terraforming, or start a new planet from the Build menu.", x, y, w, 13, colBody)
+		y += u.paragraph("Every goal is done. Watch it live, land again to build, or start a new planet from the Build menu.", x, y, w, 13, colBody)
 		return y - y0
 	}
 	// One line: number, name, progress and the collapse arrow; then the hint,
@@ -374,6 +396,9 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 	u.icon(iconChevronUp, x+w-20, y, 20, colMuted)
 	y += lh + 2
 	y += u.paragraphMax(goal.Hint, x, y, w, 12, colBody, 2)
+	if goal.Name == sim.FinalGoal {
+		y += g.trialChecklist(u, x, y+6, w) + 6
+	}
 	if prog > 0 && prog < 1 {
 		y += 5
 		u.fillRound(x, y, w, 3, 1.5, colTrack)
@@ -381,6 +406,24 @@ func (g *Game) goalCardBody(u *ui, x, y, w float64, goal sim.Goal, prog float64,
 		y += 3
 	}
 	return y - y0
+}
+
+// trialChecklist shows the final goal's conditions, ticked or crossed, and
+// how long the planet has held, and returns its height.
+func (g *Game) trialChecklist(u *ui, x, y, w float64) float64 {
+	p := g.planet
+	var chips []chip
+	for _, c := range p.WorldConditions() {
+		icon, col := iconCross, color.Color(colRed)
+		if c.Met {
+			icon, col = iconCheck, colTeal
+		}
+		chips = append(chips, chip{parts: []chipPart{iconPart(icon, col), labelPart(c.Name)}, fill: colCard})
+	}
+	if p.WorldHolds() {
+		chips = append(chips, chip{parts: []chipPart{numPart(fmt.Sprintf("Day %.0f of 1000", p.TrialDays()), colTeal)}, fill: colCard})
+	}
+	return u.flowChips(chips, x, x+w, y) - y
 }
 
 func (g *Game) dock(u *ui, left, right, y float64) {
@@ -615,11 +658,24 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 		if !unlocked {
 			tag, tagCol = "After: "+spec.UnlockedBy, colMuted
 		}
+		if spec.Orbital && p.Launched(bt) {
+			if built := p.OrbitalBuilt(bt); built < 1 {
+				tag, tagCol = fmt.Sprintf("Building in orbit · %.0f%%", built*100), colAmber
+			} else {
+				tag, tagCol = "In orbit and working", colTealTx
+			}
+		} else if spec.Orbital && unlocked && g.confirmLaunch == bt && g.ticks < g.confirmLaunchUntil {
+			tag, tagCol = "Tap again to launch", colAmber
+		}
 		u.paragraph(effect, cx+10, ccy+46, cw-20, 12, bodyCol)
 		u.text(tag, cx+10, ccy+cardH-22, sans, 11, semibold, tagCol)
 		u.area(cx, ccy, cw, cardH, func() {
 			if !unlocked {
 				g.showMessage(fmt.Sprintf("%s unlocks after the goal %q", spec.Name, spec.UnlockedBy), msgInfo)
+				return
+			}
+			if spec.Orbital {
+				g.launch(bt)
 				return
 			}
 			g.setTool(t)
@@ -665,6 +721,31 @@ func (g *Game) buildMenu(u *ui, left, right, bottom float64) float64 {
 	return y
 }
 
+// launch launches orbital project bt, after a second tap to confirm.
+func (g *Game) launch(bt sim.BuildingType) {
+	p := g.planet
+	if p.Launched(bt) {
+		g.showMessage(fmt.Sprintf("The %s is already in orbit", sim.Specs[bt].Name), msgInfo)
+		return
+	}
+	if err := p.CanLaunch(bt); err != nil {
+		g.showMessage(err.Error(), msgWarn)
+		return
+	}
+	if g.confirmLaunch != bt || g.ticks >= g.confirmLaunchUntil {
+		g.confirmLaunch, g.confirmLaunchUntil = bt, g.ticks+3*ebiten.TPS()
+		g.showMessage(fmt.Sprintf("Tap again to launch the %s for %.0f metal", sim.Specs[bt].Name, sim.Specs[bt].Cost), msgInfo)
+		return
+	}
+	g.confirmLaunchUntil = 0
+	if err := p.Launch(bt); err != nil {
+		g.showMessage(err.Error(), msgWarn)
+		return
+	}
+	g.sound(sndBuildProject)
+	g.showMessage(fmt.Sprintf("Launched! The %s takes %d days to build in orbit", sim.Specs[bt].Name, sim.Specs[bt].Countdown/10), msgGood)
+}
+
 // placeHint is the message shown when a build tool is picked.
 func placeHint(bt sim.BuildingType) string {
 	switch sim.Specs[bt].Site {
@@ -686,6 +767,13 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 	if !u.drawing() {
 		return
 	}
+	u.sprite(spriteGlyph, int(bt), x, y, size, nil, func(v *ui, x, y float64) {
+		g.drawGlyph(v, bt, x, y, size)
+	})
+}
+
+// drawGlyph draws building type bt with vector paths; see buildingGlyph.
+func (g *Game) drawGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 	k := size / 24
 	cx, cy := x+size/2, y+size/2
 	s := u.s
@@ -828,6 +916,21 @@ func (g *Game) buildingGlyph(u *ui, bt sim.BuildingType, x, y, size float64) {
 			u.fillRound(x+(5+float64(i)*5.2)*k, y+7*k, 3.6*k, 11*k, 1, rgba(0x2A313B))
 		}
 		u.circle(cx, cy-9*k, 2.4*k, withAlpha(colCO2, 200))
+	case sim.Soletta:
+		// A ring of mirrors around a small sun.
+		u.circle(cx, cy, 3.5*k, rgba(0xFFD36B))
+		for i := range 8 {
+			a := float64(i) * math.Pi / 4
+			u.circle(cx+9*math.Cos(a)*k, cy+9*math.Sin(a)*k, 1.8*k, rgba(0xDDE6F2))
+		}
+		ring(9, 0.8, rgba(0x8A96AA))
+	case sim.L1Shield:
+		// A satellite between the sun and a planet, with its field.
+		u.circle(cx+7*k, cy, 4*k, rgba(0x4D8F6B))
+		u.circle(cx-9*k, cy, 2.4*k, rgba(0xFFD36B))
+		line(-3, -6, -3, 6, 1, rgba(0x73A6FF))
+		line(-1, -8, -1, 8, 1, rgba(0x73A6FF))
+		u.fillRound(cx-3.4*k, cy-1.6*k, 3.2*k, 3.2*k, 1, rgba(0xDDE6F2))
 	case sim.Biolab:
 		u.circle(cx, cy, 10*k, rgba(0x9AA6B8))
 		u.circle(cx, cy, 8.5*k, rgba(0x294D4D))

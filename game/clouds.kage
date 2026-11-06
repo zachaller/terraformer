@@ -1,0 +1,79 @@
+//kage:unit pixels
+
+package main
+
+// Draws the planet's clouds, and their shadows on the ground, into a small
+// image that's scaled up over the planet. Clouds are soft, so a quarter of
+// the screen's resolution loses nothing, and costs a sixteenth as much as
+// working them out for every pixel. The result is premultiplied: it darkens
+// what's under it (the shadows) and adds the clouds over it.
+
+var Center vec2     // planet centre on screen, pixels
+var Radius float    // planet radius on screen, pixels
+var Scale float     // screen pixels per pixel of this image
+var Row0 vec3       // rows of the world-to-view rotation
+var Row1 vec3
+var Row2 vec3
+var Time float      // seconds
+var Light vec3      // unit light direction, view space
+var Clouds float    // cloud cover, 0 to 1
+var Amount float    // how much of the clouds to show (they fade as you zoom in)
+var Air float       // how thick the air is, 0 to 1
+
+// hash3 and vnoise are the same as the planet shader's.
+func hash3(p vec3) float {
+	q := fract(p * 0.1031)
+	q += dot(q, q.zyx+31.32)
+	return fract((q.x + q.y) * q.z)
+}
+
+func vnoise(p vec3) float {
+	i := floor(p)
+	t := fract(p)
+	u := t * t * (3 - 2*t)
+	a := mix(hash3(i), hash3(i+vec3(1, 0, 0)), u.x)
+	b := mix(hash3(i+vec3(0, 1, 0)), hash3(i+vec3(1, 1, 0)), u.x)
+	c := mix(hash3(i+vec3(0, 0, 1)), hash3(i+vec3(1, 0, 1)), u.x)
+	e := mix(hash3(i+vec3(0, 1, 1)), hash3(i+vec3(1, 1, 1)), u.x)
+	return mix(mix(a, b, u.y), mix(c, e, u.y), u.z)
+}
+
+// cloudsAt is the cloud cover at planet direction c: noise, banded by
+// latitude like a planet's weather, thicker the cloudier the planet.
+func cloudsAt(c vec3) float {
+	// Swirl the noise a little so clouds stream rather than sit in blobs.
+	c += (vec3(vnoise(c*2), vnoise(c*2+11.3), vnoise(c*2+23.7)) - 0.5) * 0.35
+	v := vnoise(c*3)*0.55 + vnoise(c*7)*0.28 + vnoise(c*17)*0.17 + 0.08*cos(c.y*7)
+	return smoothstep(0.62-0.14*Clouds, 0.82-0.1*Clouds, v)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	q := (dstPos.xy*Scale - Center) / Radius
+	q = vec2(q.x, -q.y)
+	r2 := dot(q, q)
+	if r2 > 1 {
+		return vec4(0)
+	}
+	n := vec3(q, sqrt(1-r2))
+	d := Row0*n.x + Row1*n.y + Row2*n.z
+	ndl := dot(n, Light)
+
+	// Clouds drift slowly round the planet.
+	a := Time * 0.006
+	cd := vec3(d.x*cos(a)-d.z*sin(a), d.y, d.x*sin(a)+d.z*cos(a))
+	lp := Row0*Light.x + Row1*Light.y + Row2*Light.z // the sun, planet space
+	lpr := vec3(lp.x*cos(a)-lp.z*sin(a), lp.y, lp.x*sin(a)+lp.z*cos(a))
+	shadow := 0.4 * cloudsAt(cd-lpr*0.02) * Amount
+	cover := cloudsAt(cd) * 0.8 * Amount
+
+	// Lit by the sun, and hazed by the air towards the planet's edge, as
+	// the ground is.
+	col := vec3(0.95, 0.96, 1) * (0.06 + 1.0*pow(max(ndl, 0), 0.7))
+	atmo := vec3(0.45, 0.62, 1.0)
+	rim := pow(1-n.z, 3)
+	col = mix(col, atmo*(0.25+0.85*max(ndl+0.2, 0)), rim*(0.4+0.35*Air))
+
+	// Over the ground: ground × (1 − shadow) × (1 − cover) + col × cover.
+	alpha := 1 - (1-shadow)*(1-cover)
+	return vec4(col*cover, alpha)
+}
